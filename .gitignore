@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+data/
+logs/
+render/template/__pycache__/
+venv/
+output/
+test/
+TPs_semana.xlsx
+.vscode/
