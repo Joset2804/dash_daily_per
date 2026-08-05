@@ -1,0 +1,10 @@
+requests
+pandas
+psycopg2-binary
+python-dotenv
+pyyaml
+jinja2
+matplotlib
+pytz
+openpyxl
+playwright

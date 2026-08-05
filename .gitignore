@@ -9,3 +9,7 @@ output/
 test/
 TPs_semana.xlsx
 .vscode/
+assets/
+error_lookup.csv
+error_lookup_bk.csv
+README.md
