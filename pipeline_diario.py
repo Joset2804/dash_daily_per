@@ -12,13 +12,13 @@ from playwright.sync_api import sync_playwright
 from datetime import datetime
 
 # Captura el dashboard HTML como PNG a ancho fijo
-def capturar_screenshot(html_path: str, output_path: str, ancho: int = 1300):
+def capturar_screenshot(html_path: str, output_path: str, ancho: int = 1600):
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page    = browser.new_page(viewport={"width": ancho, "height": 900})
+        page    = browser.new_page(viewport={"width": ancho, "height": 1000})
         page.goto(f"file:///{os.path.abspath(html_path)}")
         page.wait_for_timeout(1000)  # espera que cargue Chart.js
         page.locator("body").screenshot(path=output_path)
