@@ -20,6 +20,7 @@ def _preparar_contexto_periodo(
     disp_por_dia: list,
     dias_con_tp:  set,
     gap:          dict,
+    desglose_causas: dict,
     tps_list:     list,
     fecha_label:  str,
     hay_tp:       bool,
@@ -132,6 +133,7 @@ def _preparar_contexto_periodo(
         "INTERNOS":       "var(--red)",
         "ZAPPING":        "#7c3aed", 
     }
+
     # Mismo color que COLORES_GAP pero en rgba semitransparente, para el fondo de la card del resumen
     COLORES_GAP_BG = {
         "FIBRA":          "rgba(0, 46, 255, 0.06)",
@@ -140,6 +142,16 @@ def _preparar_contexto_periodo(
         "INTERNOS":       "rgba(220, 38, 38, 0.07)",
         "ZAPPING":        "rgba(124, 58, 237, 0.07)",
     }
+
+    #  Versión hex de COLORES_GAP para transparencias en el template
+    COLORES_GAP_HEX = {
+        "FIBRA":          "#002eff",
+        "HOMENETWORKING": "#3358ff",
+        "SENALES":        "#ff6600",
+        "INTERNOS":       "#dc2626",
+        "ZAPPING":        "#7c3aed",
+    }
+
     LABELS_GAP = {
         "FIBRA":          "Conectividad (red ISP / fibra)",
         "HOMENETWORKING": "Homenetworking (red domiciliaria del cliente)",
@@ -149,10 +161,22 @@ def _preparar_contexto_periodo(
     }
     gap_items = [
         {
-            "color": COLORES_GAP[key],
-            "bg":    COLORES_GAP_BG[key],
-            "label": LABELS_GAP[key],
-            "valor": _fmt_pct(gap.get(key, 0), 3),
+            "color":     COLORES_GAP[key],
+            "color_hex": COLORES_GAP_HEX[key],
+            "bg":        COLORES_GAP_BG[key],
+            "label":     LABELS_GAP[key],
+            "valor":     _fmt_pct(gap.get(key, 0), 3),
+            "causas": [
+                {
+                    "codigo": c["codigo"],
+                    "descripcion": c["descripcion"],
+                    "gap_fmt": _fmt_pct(c["gap"], 3),
+                    "participacion": c["participacion"],
+                    "acumulado":     c["acumulado"],
+                    "es_otros":      c["es_otros"],
+                }
+                for c in desglose_causas.get(key, [])
+            ],
         }
         for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]
         if gap.get(key, 0) > 0.001
@@ -220,6 +244,7 @@ def render_dashboard_periodo(
     disp_por_dia: list,
     dias_con_tp:  set,
     gap:          dict,
+    desglose_causas: dict,
     tps_list:     list,
     fecha_label:  str,
     hay_tp:       bool,
@@ -229,7 +254,7 @@ def render_dashboard_periodo(
     cfg = _load_config()
     ctx = _preparar_contexto_periodo(
         kpis, disp_por_dia, dias_con_tp,
-        gap, tps_list, fecha_label, 
+        gap, desglose_causas, tps_list, fecha_label, 
         hay_tp, peaks_data, cfg,
     )
 

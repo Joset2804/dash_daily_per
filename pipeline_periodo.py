@@ -2,7 +2,7 @@
 import os
 from datetime import datetime
 from process.tps     import _load_config
-from process.gap     import calcular_gap
+from process.gap     import calcular_gap, calcular_desglose_causas 
 from process.periodo import (
     calcular_disponibilidad_periodo,
     calcular_launcher_periodo,
@@ -38,6 +38,9 @@ def run(fecha_desde: str, fecha_hasta: str):
     # 5. Desglose del gap
     errores = fetch_errores_por_codigo(fecha_desde, fecha_hasta)
     gap     = calcular_gap(errores, disp_final)
+
+    # 5.1 — Desglose Pareto de causas por categoría
+    desglose_causas = calcular_desglose_causas(errores, disp_final, cfg)
 
     # 5.5 — Detección de peaks por período
     umbral           = cfg["peaks"]["umbral"]
@@ -77,6 +80,7 @@ def run(fecha_desde: str, fecha_hasta: str):
         disp_por_dia = disp_por_dia,
         dias_con_tp  = dias_con_tp,
         gap          = gap,
+        desglose_causas = desglose_causas,
         tps_list     = tps_list,
         fecha_label  = fecha_label,
         hay_tp       = hay_tp,
