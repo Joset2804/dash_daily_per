@@ -160,7 +160,7 @@ def _preparar_contexto(
 
     # Gap items dinámicos
     COLORES_GAP = {
-        "FIBRA":          "var(--blue)",
+        "FIBRA":          "#7c3aed",
         "HOMENETWORKING": "var(--blue-mid)",
         "SENALES":        "var(--accent)",
         "INTERNOS":       "var(--red)",
@@ -169,7 +169,7 @@ def _preparar_contexto(
 
     # Mismo color que COLORES_GAP pero en rgba semitransparente, para el fondo de la card del resumen
     COLORES_GAP_BG = {
-        "FIBRA":          "rgba(0, 46, 255, 0.06)",
+        "FIBRA":          "rgba(124, 58, 237, 0.07)",
         "HOMENETWORKING": "rgba(51, 88, 255, 0.07)",
         "SENALES":        "rgba(255, 102, 0, 0.08)",
         "INTERNOS":       "rgba(220, 38, 38, 0.07)",
@@ -178,7 +178,7 @@ def _preparar_contexto(
 
     # Mismo color que COLORES_GAP pero en hex plano.
     COLORES_GAP_HEX = {
-        "FIBRA":          "#002eff",
+        "FIBRA":          "#7c3aed",
         "HOMENETWORKING": "#3358ff",
         "SENALES":        "#ff6600",
         "INTERNOS":       "#dc2626",
@@ -186,7 +186,7 @@ def _preparar_contexto(
     }
 
     LABELS_GAP = {
-        "FIBRA":          "Conectividad (red ISP / fibra)",
+        "FIBRA":          "Conectividad y plataforma (red ISP, backend y aplicación)",
         "HOMENETWORKING": "Homenetworking (red domiciliaria del cliente)",
         "SENALES":        "Señales de origen / cabecera (fallas en entrega de contenido desde proveedores)",
         "INTERNOS":       "Errores internos (Backend / DRM / Aplicación)",
