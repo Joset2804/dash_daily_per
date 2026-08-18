@@ -117,8 +117,12 @@ def detectar_peaks_periodo(
             candidatos.append({"fecha": fecha, "hora": hora, "disponibilidad": valor})
 
         if not candidatos:
-            print(f"[PEAKS] {fecha}: peak diario {disp_dia}% pero "
-                  f"sin horas válidas fuera de ventana")
+            if not horas_dia:
+                print(f"[PEAKS] {fecha}: peak diario {disp_dia}% pero "
+                      f"sin datos horarios disponibles")
+            else:
+                print(f"[PEAKS] {fecha}: peak diario {disp_dia}% pero "
+                      f"sin horas válidas fuera de ventana")
             continue
 
         peak = min(candidatos, key=lambda x: x["disponibilidad"])

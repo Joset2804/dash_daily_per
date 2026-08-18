@@ -108,16 +108,15 @@ def calcular_disponibilidad_periodo(
         for fecha, valor in ts_dia.get("metric_6323436ccf03", [])
     }
 
-    # Fetch horario solo si hay TPs
+    # Fetch horario siempre: se usa para corregir días con TP y para detectar peaks
+    ts_hora = fetch_timeseries(fecha_desde, fecha_hasta)
     por_dia_horas = {}
-    if hay_tp:
-        ts_hora = fetch_timeseries(fecha_desde, fecha_hasta)
-        for ts_ms, valor in ts_hora:
-            fecha = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
-            hora  = datetime.utcfromtimestamp(ts_ms / 1000).hour
-            if fecha not in por_dia_horas:
-                por_dia_horas[fecha] = []
-            por_dia_horas[fecha].append((hora, valor))
+    for ts_ms, valor in ts_hora:
+        fecha = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
+        hora  = datetime.utcfromtimestamp(ts_ms / 1000).hour
+        if fecha not in por_dia_horas:
+            por_dia_horas[fecha] = []
+        por_dia_horas[fecha].append((hora, valor))
 
     # Calcular disponibilidad por día
     disp_por_dia = []
@@ -139,9 +138,7 @@ def calcular_disponibilidad_periodo(
     disp_final = _promedio([v for _, v in disp_por_dia])
     print(f"[PERIODO] Disponibilidad período: {disp_final}%")
 
-    ts_hora_raw_lista = ts_hora if hay_tp else []
-    
-    return disp_final, disp_por_dia, dias_con_tp, hay_tp, ts_hora_raw_lista
+    return disp_final, disp_por_dia, dias_con_tp, hay_tp, ts_hora
 
 # Calcular Launcher promedio del período usando granularity=day
 def calcular_launcher_periodo(
