@@ -49,30 +49,43 @@ def run(fecha_desde: str, fecha_hasta: str):
         fecha              = fecha_desde,
     )
 
-    # 3.5. Detección de peaks y canales
+    # 3.5 — Detección de peaks, causas y canales
+    from process.peaks import detectar_peak_diario
+    from sources.npaw  import fetch_canales_por_hora, fetch_errores_por_hora
+
     umbral      = cfg["peaks"]["umbral_diario"]
     max_peaks   = cfg["peaks"]["max_peaks_diario"]
     top_canales = cfg["peaks"]["top_canales_diario"]
 
     peaks_detectados = detectar_peak_diario(
         ts_raw,
-        hay_tp     = hay_tp,
-        umbral     = umbral,
-        max_peaks  = max_peaks,
+        hay_tp    = hay_tp,
+        umbral    = umbral,
+        max_peaks = max_peaks,
     )
 
     peaks_data = []
     for peak in peaks_detectados:
-        canales = fetch_canales_por_hora(peak["fecha"], peak["hora"])
+        fecha = peak["fecha"]
+        hora  = peak["hora"]
+
+        # Canales con más errores en esa hora
+        canales = fetch_canales_por_hora(fecha, hora)
+
+        # Causas de esa hora — gap proporcional sobre la disponibilidad horaria
+        errores_hora = fetch_errores_por_hora(fecha, hora)
+        gap_hora     = calcular_gap(errores_hora, peak["disponibilidad"])
+
         peaks_data.append({
-            "fecha":          peak["fecha"],
-            "fecha_fmt":      datetime.strptime(peak["fecha"], "%Y-%m-%d").strftime("%d-%b").lower(),
-            "hora":           f"{peak['hora']:02d}:00",
+            "fecha":          fecha,
+            "fecha_fmt":      datetime.strptime(fecha, "%Y-%m-%d").strftime("%d-%b").lower(),
+            "hora":           f"{hora:02d}:00",
             "disponibilidad": peak["disponibilidad"],
             "canales":        canales[:top_canales],
+            "gap_hora":       gap_hora,
         })
-        print(f"[PEAKS] Top {top_canales} canales para "
-              f"{peak['fecha']} {peak['hora']:02d}:00")
+
+        print(f"[PEAKS] {fecha} {hora:02d}:00 → causas y canales obtenidos")
 
     # 3. Desglose del gap
     gap = calcular_gap(errores, disp_final)

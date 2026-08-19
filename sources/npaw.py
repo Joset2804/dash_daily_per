@@ -240,3 +240,22 @@ def fetch_canales_por_hora(fecha: str, hora: int) -> list[dict]:
         for v in values
         if v.get("value", 0) > 0
     ]
+
+# Errores agrupados por código para una hora específica
+def fetch_errores_por_hora(fecha: str, hora: int) -> list[dict]:
+
+    cfg = _load_config()
+    params = [
+        ("fromDate",        f"{fecha} {hora:02d}:00:00"),
+        ("toDate",          f"{fecha} {hora:02d}:59:59"),
+        ("metrics",         "errors"),
+        ("groupBy",         "error_name"),
+        ("orderBy",         "errors"),
+        ("orderDirection",  "desc"),
+        ("limit",           "100"),
+        ("filter",          _build_filter(cfg)),
+    ]
+    raw     = _get(params, cfg)
+    errores = _parse_errores(raw)
+    print(f"[NPAW] Errores por código {fecha} {hora:02d}:00: {len(errores)} códigos")
+    return errores

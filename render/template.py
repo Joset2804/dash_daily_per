@@ -201,10 +201,36 @@ def _preparar_contexto(
     "#0284c7",   # 5° — Azul
     ]
 
-    peaks_data_con_color = [
-    {**p, "color": PALETA_PEAKS[i] if i < len(PALETA_PEAKS) else "#64748b"}
-    for i, p in enumerate(peaks_data)
-    ]
+    # ── Peaks: numeración, chips de causas y gap horario ──────────
+    LABELS_CHIP = {
+        "FIBRA":          "Conectividad y plataforma",
+        "HOMENETWORKING": "Homenetworking",
+        "SENALES":        "Señales",
+        "INTERNOS":       "Internos",
+        "ZAPPING":        "Fast Zapping",
+    }
+
+    peaks_data_ctx = []
+    for i, p in enumerate(peaks_data):
+        chips = [
+            {
+                "label": LABELS_CHIP[key],
+                "valor": _fmt_pct(p["gap_hora"].get(key, 0), 3),
+                "color": COLORES_GAP_HEX[key],
+            }
+            for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]
+            if p["gap_hora"].get(key, 0) > 0.001
+        ]
+
+        peaks_data_ctx.append({
+            "num":            i + 1,
+            "fecha_fmt":      p["fecha_fmt"],
+            "hora":           p["hora"],
+            "disp_fmt":       _fmt_pct(p["disponibilidad"], 3),
+            "gap_total_fmt":  _fmt_pct(p["gap_hora"]["gap_total"], 3),
+            "canales":        p["canales"],
+            "chips":          chips,
+        })
     
     # Índices de los peaks en el chart
     peak_chart_indices = []
@@ -291,7 +317,7 @@ def _preparar_contexto(
         "gap_items":     gap_items,
 
         # Peak
-        "peaks_data": peaks_data_con_color,
+        "peaks_data": peaks_data_ctx,
         "peak_chart_indices": peak_chart_indices,
 
         # TPs
