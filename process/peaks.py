@@ -86,7 +86,8 @@ def detectar_peaks_periodo(
     disp_por_dia:  list,
     ts_hora_raw:   list,
     dias_con_tp:   set,
-    umbral:        float = 99.70,
+    umbral:        float = 99.80,
+    max_peaks:     int   = 3,
 ) -> list:
 
     cfg = _load_config()
@@ -100,34 +101,42 @@ def detectar_peaks_periodo(
             por_dia[fecha] = []
         por_dia[fecha].append((hora, valor))
 
-    peaks = []
+    dias_afectados = []
+
     for fecha, disp_dia in disp_por_dia:
         if disp_dia >= umbral:
             continue
 
-        # Buscar el peak horario más bajo de ese día
         horas_dia = por_dia.get(fecha, [])
+        tiene_tp  = fecha in dias_con_tp
+
+        # Candidatos: horas bajo umbral, excluyendo ventana si hay TP
         candidatos = []
         for hora, valor in horas_dia:
             if valor >= umbral:
                 continue
-            # Si tiene TP, excluir horas de ventana de mantenimiento
-            if fecha in dias_con_tp and _hora_en_ventana(hora, cfg):
+            if tiene_tp and _hora_en_ventana(hora, cfg):
                 continue
-            candidatos.append({"fecha": fecha, "hora": hora, "disponibilidad": valor})
+            candidatos.append({"hora": hora, "disponibilidad": valor})
 
         if not candidatos:
-            if not horas_dia:
-                print(f"[PEAKS] {fecha}: peak diario {disp_dia}% pero "
-                      f"sin datos horarios disponibles")
-            else:
-                print(f"[PEAKS] {fecha}: peak diario {disp_dia}% pero "
-                      f"sin horas válidas fuera de ventana")
+            print(f"[PEAKS] {fecha}: disp {disp_dia}% pero sin horas válidas "
+                  f"fuera de ventana de mantenimiento")
             continue
 
-        peak = min(candidatos, key=lambda x: x["disponibilidad"])
-        peaks.append(peak)
-        print(f"[PEAKS] Peak período detectado: {peak['fecha']} "
-              f"{peak['hora']:02d}:00 → {peak['disponibilidad']}%")
+        # Ordenar de menor a mayor y tomar los N peores
+        peaks = sorted(candidatos, key=lambda x: x["disponibilidad"])[:max_peaks]
 
-    return peaks
+        dias_afectados.append({
+            "fecha":          fecha,
+            "disp_dia":       disp_dia,
+            "hay_tp":         tiene_tp,
+            "horas_bajo_slo": len(candidatos),
+            "peaks":          peaks,
+        })
+
+        print(f"[PEAKS] {fecha}: disp={disp_dia}% | "
+              f"{len(candidatos)} hrs bajo SLO | "
+              f"peor peak {peaks[0]['hora']:02d}:00 → {peaks[0]['disponibilidad']}%")
+
+    return dias_afectados

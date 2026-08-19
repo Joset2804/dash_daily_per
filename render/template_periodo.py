@@ -24,7 +24,7 @@ def _preparar_contexto_periodo(
     tps_list:     list,
     fecha_label:  str,
     hay_tp:       bool,
-    peaks_data:   list,
+    dias_afectados:   list,
     cfg:          dict,
 ) -> dict:
 
@@ -89,36 +89,64 @@ def _preparar_contexto_periodo(
         if fecha in dias_con_tp
     ]
 
-    # Índices de los días peak para resaltar su punto en el gráfico (igual que peak_chart_index en el diario)
+    # Días afectados: colores, formato y chips de causas
+
+    LABELS_CHIP = {
+        "FIBRA":          "Conectividad y plataforma",
+        "HOMENETWORKING": "Homenetworking",
+        "SENALES":        "Señales",
+        "INTERNOS":       "Internos",
+        "ZAPPING":        "Fast Zapping",
+    }
+
+    # Versión hex de COLORES_GAP para transparencias en el template
+    COLORES_GAP_HEX = {
+        "FIBRA":          "#7c3aed",
+        "HOMENETWORKING": "#3358ff",
+        "SENALES":        "#ff6600",
+        "INTERNOS":       "#dc2626",
+        "ZAPPING":        "#7c3aed",
+    }
+
+    dias_afectados_ctx = []
+    for i, dia in enumerate(dias_afectados):
+        # Chips de causas — solo las que superan el umbral mínimo
+        chips = [
+            {
+                "label":  LABELS_CHIP[key],
+                "valor":  _fmt_pct(dia["gap_dia"].get(key, 0), 3),
+                "color":  COLORES_GAP_HEX[key],
+            }
+            for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]
+            if dia["gap_dia"].get(key, 0) > 0.001
+        ]
+
+        dias_afectados_ctx.append({
+            "num":            i + 1,
+            "fecha":          dia["fecha"],
+            "fecha_fmt":      dia["fecha_fmt"],
+            "disp_fmt":       _fmt_pct(dia["disp_dia"], 2),
+            "disp_raw":       dia["disp_dia"],
+            "hay_tp":         dia["hay_tp"],
+            "horas_bajo_slo": dia["horas_bajo_slo"],
+            # "color":          colores_dia[i],
+            "peaks": [
+                {
+                    "hora":     f"{p['hora']:02d}:00",
+                    "disp_fmt": _fmt_pct(p["disponibilidad"], 3),
+                }
+                for p in dia["peaks"]
+            ],
+            "canales": dia["canales"],
+            "chips":   chips,
+        })
+
+    # Índices de los días afectados en el chart
     fechas_dias = [fecha for fecha, _ in disp_por_dia]
     peak_chart_indices = [
-        fechas_dias.index(p["fecha"])
-        for p in peaks_data
-        if p.get("fecha") in fechas_dias
-    ]
-
-    # Paleta de colores para peaks — del más grave al menos grave
-    PALETA_PEAKS = [
-        "#dc2626",   # 1° — Rojo       (más grave)
-        "#ea580c",   # 2° — Naranja
-        "#d97706",   # 3° — Ámbar
-        "#16a34a",   # 4° — Verde oscuro
-        "#0284c7",   # 5° — Azul
-    ]
-
-    # Ordenar peaks de menor a mayor disponibilidad y asignar color
-    peaks_ordenados = sorted(
-        enumerate(peaks_data),
-        key=lambda x: x[1]["disponibilidad"]
-    )
-    colores_peaks = {}
-    for rank, (idx_original, _) in enumerate(peaks_ordenados):
-        colores_peaks[idx_original] = PALETA_PEAKS[rank] if rank < len(PALETA_PEAKS) else "#64748b"
-
-    # Agregar color a cada peak
-    peaks_data_con_color = [
-        {**p, "color": colores_peaks[i]}
-        for i, p in enumerate(peaks_data)
+        fechas_dias.index(d["fecha"])
+        for d in dias_afectados
+        if d["fecha"] in fechas_dias
     ]
 
     # Suscriptores
@@ -141,15 +169,6 @@ def _preparar_contexto_periodo(
         "SENALES":        "rgba(255, 102, 0, 0.08)",
         "INTERNOS":       "rgba(220, 38, 38, 0.07)",
         "ZAPPING":        "rgba(124, 58, 237, 0.07)",
-    }
-
-    #  Versión hex de COLORES_GAP para transparencias en el template
-    COLORES_GAP_HEX = {
-        "FIBRA":          "#7c3aed",
-        "HOMENETWORKING": "#3358ff",
-        "SENALES":        "#ff6600",
-        "INTERNOS":       "#dc2626",
-        "ZAPPING":        "#7c3aed",
     }
 
     LABELS_GAP = {
@@ -232,8 +251,8 @@ def _preparar_contexto_periodo(
         "tps_list": tps_list,
         
         # Peaks
-        #"peaks_data": peaks_data,
-        "peaks_data": peaks_data_con_color,
+        # Días afectados
+        "dias_afectados": dias_afectados_ctx,
         "peak_chart_indices": peak_chart_indices,
     }
 
@@ -248,14 +267,14 @@ def render_dashboard_periodo(
     tps_list:     list,
     fecha_label:  str,
     hay_tp:       bool,
-    peaks_data:   list,
+    dias_afectados:   list,
     output_path:  str,
 ) -> str:
     cfg = _load_config()
     ctx = _preparar_contexto_periodo(
         kpis, disp_por_dia, dias_con_tp,
         gap, desglose_causas, tps_list, fecha_label, 
-        hay_tp, peaks_data, cfg,
+        hay_tp, dias_afectados, cfg,
     )
 
     template_dir = os.path.join(os.path.dirname(__file__), "template")

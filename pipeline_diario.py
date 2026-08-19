@@ -50,7 +50,7 @@ def run(fecha_desde: str, fecha_hasta: str):
     )
 
     # 3.5. Detección de peaks y canales
-    umbral      = cfg["peaks"]["umbral"]
+    umbral      = cfg["peaks"]["umbral_diario"]
     max_peaks   = cfg["peaks"]["max_peaks_diario"]
     top_canales = cfg["peaks"]["top_canales_diario"]
 
