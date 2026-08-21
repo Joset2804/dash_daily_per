@@ -94,7 +94,7 @@ def _preparar_contexto_periodo(
     LABELS_CHIP = {
         "FIBRA":          "Conectividad y plataforma",
         "HOMENETWORKING": "Homenetworking",
-        "SENALES":        "Señales",
+        "SENALES":        "Señales de origen / cabecera",
         "INTERNOS":       "Internos",
         "ZAPPING":        "Fast Zapping",
     }

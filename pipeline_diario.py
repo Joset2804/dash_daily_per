@@ -12,15 +12,25 @@ from playwright.sync_api import sync_playwright
 from datetime import datetime
 
 # Captura el dashboard HTML como PNG a ancho fijo
-def capturar_screenshot(html_path: str, output_path: str, ancho: int = 1600):
+def capturar_screenshot(html_path: str, output_path: str, ancho: int = None):
+    cfg = _load_config()
+    if ancho is None:
+        ancho = cfg.get("screenshot", {}).get("ancho", 1600)
+    alto = cfg.get("screenshot", {}).get("alto", 1000)
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page    = browser.new_page(viewport={"width": ancho, "height": 1000})
+        page    = browser.new_page(viewport={"width": ancho, "height": alto})
         page.goto(f"file:///{os.path.abspath(html_path)}")
-        page.wait_for_timeout(1000)  # espera que cargue Chart.js
+        page.wait_for_timeout(1000)
+
+        # Abrir todos los acordeones antes de capturar
+        page.evaluate("""
+            document.querySelectorAll('details').forEach(d => d.open = true);
+        """)
+        page.wait_for_timeout(300)
+
         page.locator("body").screenshot(path=output_path)
         browser.close()
     print(f"[SCREENSHOT] Guardado: {output_path}")
