@@ -259,3 +259,74 @@ def fetch_errores_por_hora(fecha: str, hora: int) -> list[dict]:
     errores = _parse_errores(raw)
     print(f"[NPAW] Errores por código {fecha} {hora:02d}:00: {len(errores)} códigos")
     return errores
+
+# Errores agrupados por una dimensión para una hora específica (content_channel, device, app_release_version)
+def fetch_por_dimension_hora(
+    fecha:     str,
+    hora:      int,
+    dimension: str,
+    top:       int = 3,
+) -> list[dict]:
+
+    cfg = _load_config()
+    params = [
+        ("fromDate",        f"{fecha} {hora:02d}:00:00"),
+        ("toDate",          f"{fecha} {hora:02d}:59:59"),
+        ("metrics",         "errors"),
+        ("groupBy",         dimension),
+        ("orderBy",         "errors"),
+        ("orderDirection",  "desc"),
+        ("limit",           "50"),
+        ("filter",          _build_filter(cfg)),
+    ]
+
+    raw = _get(params, cfg)
+
+    try:
+        values = raw["data"][0]["metrics"][0]["values"]
+    except (KeyError, IndexError, TypeError):
+        return []
+
+    # Extraer pares (nombre, cantidad) ignorando ceros
+    items = [
+        {"nombre": v.get(dimension, "Desconocido"), "errores": v.get("value", 0)}
+        for v in values
+        if v.get("value", 0) > 0
+    ]
+
+    if not items:
+        return []
+
+    total = sum(i["errores"] for i in items)
+    if total == 0:
+        return []
+
+    individuales = items[:top]
+    remanentes   = items[top:]
+
+    if len(remanentes) == 1:
+        individuales.append(remanentes[0])
+        remanentes = []
+
+    resultado = [
+        {
+            "nombre":   i["nombre"],
+            "errores":  i["errores"],
+            "pct":      round(i["errores"] / total * 100, 1),
+            "es_otros": False,
+        }
+        for i in individuales
+    ]
+
+    if remanentes:
+        errores_otros = sum(r["errores"] for r in remanentes)
+        resultado.append({
+            "nombre":   f"Otros ({len(remanentes)})",
+            "errores":  errores_otros,
+            "pct":      round(errores_otros / total * 100, 1),
+            "es_otros": True,
+        })
+
+    print(f"[NPAW] {dimension} {fecha} {hora:02d}:00: "
+          f"{len(resultado)} ítems (total {total} errores)")
+    return resultado

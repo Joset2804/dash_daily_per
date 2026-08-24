@@ -59,13 +59,15 @@ def run(fecha_desde: str, fecha_hasta: str):
         fecha              = fecha_desde,
     )
 
-    # 3.5 — Detección de peaks, causas y canales
+    # 3.5 — Detección de peaks, causas, canales, devices y versiones
     from process.peaks import detectar_peak_diario
-    from sources.npaw  import fetch_canales_por_hora, fetch_errores_por_hora
+    from sources.npaw  import fetch_errores_por_hora, fetch_por_dimension_hora
 
-    umbral      = cfg["peaks"]["umbral_diario"]
-    max_peaks   = cfg["peaks"]["max_peaks_diario"]
-    top_canales = cfg["peaks"]["top_canales_diario"]
+    umbral        = cfg["peaks"]["umbral_diario"]
+    max_peaks     = cfg["peaks"]["max_peaks_diario"]
+    top_canales   = cfg["peaks"]["top_canales_diario"]
+    top_devices   = cfg["peaks"]["top_devices"]
+    top_versiones = cfg["peaks"]["top_versiones"]
 
     peaks_detectados = detectar_peak_diario(
         ts_raw,
@@ -80,9 +82,21 @@ def run(fecha_desde: str, fecha_hasta: str):
         hora  = peak["hora"]
 
         # Canales con más errores en esa hora
-        canales = fetch_canales_por_hora(fecha, hora)
+        canales = fetch_por_dimension_hora(
+            fecha, hora, "content_channel", top_canales
+        )
 
-        # Causas de esa hora — gap proporcional sobre la disponibilidad horaria
+        # Dispositivos con más errores en esa hora
+        devices = fetch_por_dimension_hora(
+            fecha, hora, "device", top_devices
+        )
+
+        # Versiones de app con más errores en esa hora
+        versiones = fetch_por_dimension_hora(
+            fecha, hora, "app_release_version", top_versiones
+        )
+
+        # Causas de esa hora
         errores_hora = fetch_errores_por_hora(fecha, hora)
         gap_hora     = calcular_gap(errores_hora, peak["disponibilidad"])
 
@@ -91,11 +105,13 @@ def run(fecha_desde: str, fecha_hasta: str):
             "fecha_fmt":      datetime.strptime(fecha, "%Y-%m-%d").strftime("%d-%b").lower(),
             "hora":           f"{hora:02d}:00",
             "disponibilidad": peak["disponibilidad"],
-            "canales":        canales[:top_canales],
+            "canales":        canales,
+            "devices":        devices,
+            "versiones":      versiones,
             "gap_hora":       gap_hora,
         })
 
-        print(f"[PEAKS] {fecha} {hora:02d}:00 → causas y canales obtenidos")
+        print(f"[PEAKS] {fecha} {hora:02d}:00 → detalle completo obtenido")
 
     # 3. Desglose del gap
     gap = calcular_gap(errores, disp_final)

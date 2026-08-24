@@ -229,6 +229,8 @@ def _preparar_contexto(
             "disp_fmt":       _fmt_pct(p["disponibilidad"], 3),
             "gap_total_fmt":  _fmt_pct(p["gap_hora"]["gap_total"], 3),
             "canales":        p["canales"],
+            "devices":        p["devices"],        # ← nuevo
+            "versiones":      p["versiones"],      # ← nuevo
             "chips":          chips,
         })
     
