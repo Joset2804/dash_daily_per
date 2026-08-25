@@ -75,6 +75,16 @@ def _sdot(valor: float, verde_threshold: float, rojo_threshold: float) -> str:
         "var(--red)":    "sdot-r",
     }[color]
 
+# Agrega a cada item el ancho de barra relativo al item de mayor participacion
+def _con_barra(items: list) -> list:
+
+    max_pct = max((i.get("pct", 0) for i in items), default=0)
+    return [
+        {**i, "bar_w": f"{(i.get('pct', 0) / max_pct * 100):.1f}" if max_pct else "0.0"}
+        for i in items
+    ]
+
+
 # Preparación del contexto para renderizar el dashboard
 def _preparar_contexto(
     kpis:                 dict,
@@ -212,25 +222,32 @@ def _preparar_contexto(
 
     peaks_data_ctx = []
     for i, p in enumerate(peaks_data):
-        chips = [
-            {
-                "label": LABELS_CHIP[key],
-                "valor": _fmt_pct(p["gap_hora"].get(key, 0), 3),
-                "color": COLORES_GAP_HEX[key],
-            }
-            for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]
-            if p["gap_hora"].get(key, 0) > 0.001
-        ]
+        gap_hora_total = p["gap_hora"]["gap_total"]
+
+        # Causas de la hora: valor + participacion sobre el gap de esa hora
+        chips = []
+        for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]:
+            valor = p["gap_hora"].get(key, 0)
+            if valor <= 0.001:
+                continue
+            share = (valor / gap_hora_total * 100) if gap_hora_total else 0
+            chips.append({
+                "label":     LABELS_CHIP[key],
+                "valor":     _fmt_pct(valor, 3),
+                "color":     COLORES_GAP_HEX[key],
+                "share_w":   f"{share:.2f}",
+                "share_fmt": _fmt_pct(share, 1),
+            })
 
         peaks_data_ctx.append({
             "num":            i + 1,
             "fecha_fmt":      p["fecha_fmt"],
             "hora":           p["hora"],
             "disp_fmt":       _fmt_pct(p["disponibilidad"], 3),
-            "gap_total_fmt":  _fmt_pct(p["gap_hora"]["gap_total"], 3),
-            "canales":        p["canales"],
-            "devices":        p["devices"],        # ← nuevo
-            "versiones":      p["versiones"],      # ← nuevo
+            "gap_total_fmt":  _fmt_pct(gap_hora_total, 3),
+            "canales":        _con_barra(p["canales"]),
+            "devices":        _con_barra(p["devices"]),
+            "versiones":      _con_barra(p["versiones"]),
             "chips":          chips,
         })
     
