@@ -330,3 +330,98 @@ def fetch_por_dimension_hora(
     print(f"[NPAW] {dimension} {fecha} {hora:02d}:00: "
           f"{len(resultado)} ítems (total {total} errores)")
     return resultado
+
+# Errores agrupados por una dimensión para un día completo
+# Si el día tiene TP, excluye la ventana de mantenimiento con dos llamadas
+def fetch_por_dimension_dia(
+    fecha:           str,
+    dimension:       str,
+    top:             int  = 3,
+    excluir_ventana: bool = False,
+) -> list[dict]:
+
+    cfg = _load_config()
+
+    # Rangos a consultar
+    if excluir_ventana:
+        hora_inicio = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
+        hora_fin    = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
+        rangos = [
+            (f"{fecha} 00:00:00", f"{fecha} {hora_inicio - 1:02d}:59:59"),
+            (f"{fecha} {hora_fin:02d}:00:00", f"{fecha} 23:59:59"),
+        ]
+    else:
+        rangos = [(f"{fecha} 00:00:00", f"{fecha} 23:59:59")]
+
+    # Acumular errores por nombre a través de todos los rangos
+    acumulado = {}
+    for from_date, to_date in rangos:
+        params = [
+            ("fromDate",        from_date),
+            ("toDate",          to_date),
+            ("metrics",         "errors"),
+            ("groupBy",         dimension),
+            ("orderBy",         "errors"),
+            ("orderDirection",  "desc"),
+            ("limit",           "100"),
+            ("filter",          _build_filter(cfg)),
+        ]
+        raw = _get(params, cfg)
+
+        try:
+            values = raw["data"][0]["metrics"][0]["values"]
+        except (KeyError, IndexError, TypeError):
+            continue
+
+        for v in values:
+            nombre   = v.get(dimension, "Desconocido")
+            cantidad = v.get("value", 0)
+            if cantidad > 0:
+                acumulado[nombre] = acumulado.get(nombre, 0) + cantidad
+
+    if not acumulado:
+        return []
+
+    total = sum(acumulado.values())
+    if total == 0:
+        return []
+
+    # Ordenar de mayor a menor
+    items = sorted(
+        [{"nombre": k, "errores": v} for k, v in acumulado.items()],
+        key=lambda x: x["errores"],
+        reverse=True,
+    )
+
+    # Separar individuales del remanente
+    individuales = items[:top]
+    remanentes   = items[top:]
+
+    # Si solo queda 1 remanente, mostrarlo individual
+    if len(remanentes) == 1:
+        individuales.append(remanentes[0])
+        remanentes = []
+
+    resultado = [
+        {
+            "nombre":   i["nombre"],
+            "errores":  i["errores"],
+            "pct":      round(i["errores"] / total * 100, 1),
+            "es_otros": False,
+        }
+        for i in individuales
+    ]
+
+    if remanentes:
+        errores_otros = sum(r["errores"] for r in remanentes)
+        resultado.append({
+            "nombre":   f"Otros ({len(remanentes)})",
+            "errores":  errores_otros,
+            "pct":      round(errores_otros / total * 100, 1),
+            "es_otros": True,
+        })
+
+    sufijo = " (sin ventana mant.)" if excluir_ventana else ""
+    print(f"[NPAW] {dimension} {fecha}{sufijo}: "
+          f"{len(resultado)} ítems (total {total} errores)")
+    return resultado

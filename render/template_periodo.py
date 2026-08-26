@@ -11,6 +11,7 @@ from render.template import (
     _fmt_ms,
     _color_var,
     _sdot,
+    _con_barra,
 )
 
 
@@ -110,16 +111,22 @@ def _preparar_contexto_periodo(
 
     dias_afectados_ctx = []
     for i, dia in enumerate(dias_afectados):
-        # Chips de causas — solo las que superan el umbral mínimo
-        chips = [
-            {
-                "label":  LABELS_CHIP[key],
-                "valor":  _fmt_pct(dia["gap_dia"].get(key, 0), 3),
-                "color":  COLORES_GAP_HEX[key],
-            }
-            for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]
-            if dia["gap_dia"].get(key, 0) > 0.001
-        ]
+        gap_dia_total = dia["gap_dia"]["gap_total"]
+
+        # Causas del día: valor + participación sobre el gap del día
+        chips = []
+        for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]:
+            valor = dia["gap_dia"].get(key, 0)
+            if valor <= 0.001:
+                continue
+            share = (valor / gap_dia_total * 100) if gap_dia_total else 0
+            chips.append({
+                "label":     LABELS_CHIP[key],
+                "valor":     _fmt_pct(valor, 3),
+                "color":     COLORES_GAP_HEX[key],
+                "share_w":   f"{share:.2f}",
+                "share_fmt": _fmt_pct(share, 1),
+            })
 
         dias_afectados_ctx.append({
             "num":            i + 1,
@@ -129,7 +136,7 @@ def _preparar_contexto_periodo(
             "disp_raw":       dia["disp_dia"],
             "hay_tp":         dia["hay_tp"],
             "horas_bajo_slo": dia["horas_bajo_slo"],
-            # "color":          colores_dia[i],
+            "gap_total_fmt":  _fmt_pct(gap_dia_total, 3),
             "peaks": [
                 {
                     "hora":     f"{p['hora']:02d}:00",
@@ -137,8 +144,10 @@ def _preparar_contexto_periodo(
                 }
                 for p in dia["peaks"]
             ],
-            "canales": dia["canales"],
-            "chips":   chips,
+            "canales":   _con_barra(dia["canales"]),
+            "devices":   _con_barra(dia["devices"]),
+            "versiones": _con_barra(dia["versiones"]),
+            "chips":     chips,
         })
 
     # Índices de los días afectados en el chart

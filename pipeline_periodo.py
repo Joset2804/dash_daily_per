@@ -44,11 +44,13 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     # 5.5 — Detección de peaks por día + causas + canales
     from process.peaks import detectar_peaks_periodo
-    from sources.npaw  import fetch_canales_por_hora
+    from sources.npaw  import fetch_por_dimension_dia
 
     umbral            = cfg["peaks"]["umbral_periodo"]
     max_peaks_por_dia = cfg["peaks"]["max_peaks_por_dia"]
     top_canales       = cfg["peaks"]["top_canales_periodo"]
+    top_devices       = cfg["peaks"]["top_devices"]
+    top_versiones     = cfg["peaks"]["top_versiones"]
 
     dias_afectados_raw = detectar_peaks_periodo(
         disp_por_dia = disp_por_dia,
@@ -60,13 +62,21 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     dias_afectados = []
     for dia in dias_afectados_raw:
-        fecha      = dia["fecha"]
-        peor_peak  = dia["peaks"][0]
+        fecha    = dia["fecha"]
+        tiene_tp = dia["hay_tp"]
 
-        # Canales del peak más bajo
-        canales = fetch_canales_por_hora(fecha, peor_peak["hora"])
+        # Dimensiones del día completo — excluyendo ventana si hay TP
+        canales = fetch_por_dimension_dia(
+            fecha, "content_channel", top_canales, tiene_tp
+        )
+        devices = fetch_por_dimension_dia(
+            fecha, "device", top_devices, tiene_tp
+        )
+        versiones = fetch_por_dimension_dia(
+            fecha, "app_release_version", top_versiones, tiene_tp
+        )
 
-        # Causas del día completo
+        # Causas del día completo (sin excluir ventana, por consistencia con el diario)
         errores_dia = fetch_errores_por_codigo(fecha, fecha)
         gap_dia     = calcular_gap(errores_dia, dia["disp_dia"])
 
@@ -74,14 +84,16 @@ def run(fecha_desde: str, fecha_hasta: str):
             "fecha":          fecha,
             "fecha_fmt":      datetime.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y"),
             "disp_dia":       dia["disp_dia"],
-            "hay_tp":         dia["hay_tp"],
+            "hay_tp":         tiene_tp,
             "horas_bajo_slo": dia["horas_bajo_slo"],
             "peaks":          dia["peaks"],
-            "canales":        canales[:top_canales],
+            "canales":        canales,
+            "devices":        devices,
+            "versiones":      versiones,
             "gap_dia":        gap_dia,
         })
 
-        print(f"[PERIODO] {fecha}: causas y canales obtenidos")
+        print(f"[PERIODO] {fecha}: detalle completo obtenido")
 
     print(f"[PERIODO] {len(dias_afectados)} días afectados con detalle completo")
 
