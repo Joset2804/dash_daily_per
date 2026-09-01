@@ -276,7 +276,7 @@ def fetch_por_dimension_hora(
         ("groupBy",         dimension),
         ("orderBy",         "errors"),
         ("orderDirection",  "desc"),
-        ("limit",           "50"),
+        ("limit",           "100"),
         ("filter",          _build_filter(cfg)),
     ]
 
@@ -363,7 +363,7 @@ def fetch_por_dimension_dia(
             ("groupBy",         dimension),
             ("orderBy",         "errors"),
             ("orderDirection",  "desc"),
-            ("limit",           "100"),
+            ("limit",           "200"),
             ("filter",          _build_filter(cfg)),
         ]
         raw = _get(params, cfg)
