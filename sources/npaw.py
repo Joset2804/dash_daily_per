@@ -425,3 +425,126 @@ def fetch_por_dimension_dia(
     print(f"[NPAW] {dimension} {fecha}{sufijo}: "
           f"{len(resultado)} ítems (total {total} errores)")
     return resultado
+
+
+# Errores agrupados por versión de app + dispositivo
+def fetch_version_device(
+    fecha:           str,
+    hora:            int  = None,
+    top:             int  = 3,
+    excluir_ventana: bool = False,
+) -> list[dict]:
+
+    cfg = _load_config()
+
+    # Rangos a consultar
+    if hora is not None:
+        rangos = [(f"{fecha} {hora:02d}:00:00", f"{fecha} {hora:02d}:59:59")]
+    elif excluir_ventana:
+        h_ini = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
+        h_fin = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
+        rangos = [
+            (f"{fecha} 00:00:00", f"{fecha} {h_ini - 1:02d}:59:59"),
+            (f"{fecha} {h_fin:02d}:00:00", f"{fecha} 23:59:59"),
+        ]
+    else:
+        rangos = [(f"{fecha} 00:00:00", f"{fecha} 23:59:59")]
+
+    # Acumular por (versión, device)
+    acumulado = {}
+    for from_date, to_date in rangos:
+        params = [
+            ("fromDate",        from_date),
+            ("toDate",          to_date),
+            ("metrics",         "errors"),
+            ("groupBy",         "app_release_version,device"),
+            ("orderBy",         "errors"),
+            ("orderDirection",  "desc"),
+            ("limit",           "200"),
+            ("filter",          _build_filter(cfg)),
+        ]
+        raw = _get(params, cfg)
+
+        try:
+            values = raw["data"][0]["metrics"][0]["values"]
+        except (KeyError, IndexError, TypeError):
+            continue
+
+        for v in values:
+            version  = v.get("app_release_version", "Desconocida")
+            device   = v.get("device", "Desconocido")
+            cantidad = v.get("value", 0)
+            if cantidad > 0:
+                clave = (version, device)
+                acumulado[clave] = acumulado.get(clave, 0) + cantidad
+
+    if not acumulado:
+        return []
+
+    total = sum(acumulado.values())
+    if total == 0:
+        return []
+
+    # Agrupar por versión, sumando devices
+    por_version = {}
+    for (version, device), cantidad in acumulado.items():
+        if version not in por_version:
+            por_version[version] = {"errores": 0, "devices": {}}
+        por_version[version]["errores"] += cantidad
+        por_version[version]["devices"][device] = (
+            por_version[version]["devices"].get(device, 0) + cantidad
+        )
+
+    # Ordenar versiones por total de errores
+    items = sorted(
+        [
+            {
+                "version": ver,
+                "errores": data["errores"],
+                "devices": [
+                    d for d, _ in sorted(
+                        data["devices"].items(), key=lambda x: x[1], reverse=True
+                    )
+                ],
+            }
+            for ver, data in por_version.items()
+        ],
+        key=lambda x: x["errores"],
+        reverse=True,
+    )
+
+    individuales = items[:top]
+    remanentes   = items[top:]
+
+    if len(remanentes) == 1:
+        individuales.append(remanentes[0])
+        remanentes = []
+
+    resultado = [
+        {
+            "version":  i["version"],
+            "devices":  i["devices"],
+            "nombre":   f"{i['version']} · {', '.join(i['devices'])}",
+            "errores":  i["errores"],
+            "pct":      round(i["errores"] / total * 100, 1),
+            "es_otros": False,
+        }
+        for i in individuales
+    ]
+
+    if remanentes:
+        errores_otros = sum(r["errores"] for r in remanentes)
+        resultado.append({
+            "version":  "Otras",
+            "devices":  [],
+            "nombre":   f"Otras versiones ({len(remanentes)})",
+            "errores":  errores_otros,
+            "pct":      round(errores_otros / total * 100, 1),
+            "es_otros": True,
+        })
+
+    ctx = f"{hora:02d}:00" if hora is not None else "día"
+    suf = " (sin ventana mant.)" if excluir_ventana and hora is None else ""
+    print(f"[NPAW] version·device {fecha} {ctx}{suf}: "
+          f"{len(resultado)} versiones (total {total} errores)")
+    return resultado

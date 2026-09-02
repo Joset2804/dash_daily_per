@@ -84,6 +84,17 @@ def _con_barra(items: list) -> list:
         for i in items
     ]
 
+# Agrega a cada ítem el % de indisponibilidad que se le atribuye,
+def _con_aporte_gap(items: list, gap_total: float) -> list:
+
+    return [
+        {
+            **i,
+            "aporte_gap":     round(gap_total * i.get("pct", 0) / 100, 4),
+            "aporte_gap_fmt": _fmt_pct(gap_total * i.get("pct", 0) / 100, 3),
+        }
+        for i in items
+    ]
 
 # Preparación del contexto para renderizar el dashboard
 def _preparar_contexto(
@@ -92,6 +103,7 @@ def _preparar_contexto(
     disponibilidad_final: float,
     gap:                  dict,
     desglose_causas:      dict,
+    dim_dia:              dict,
     tps_list:             list,
     fecha_desde:          str,
     hay_tp:               bool,
@@ -224,7 +236,7 @@ def _preparar_contexto(
     for i, p in enumerate(peaks_data):
         gap_hora_total = p["gap_hora"]["gap_total"]
 
-        # Causas de la hora: valor + participacion sobre el gap de esa hora
+        # Causas de la hora: valor + participación sobre el gap de esa hora
         chips = []
         for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]:
             valor = p["gap_hora"].get(key, 0)
@@ -239,17 +251,57 @@ def _preparar_contexto(
                 "share_fmt": _fmt_pct(share, 1),
             })
 
+        # Dimensiones con aporte al gap de esa hora
+        canales   = _con_barra(_con_aporte_gap(p["canales"],         gap_hora_total))
+        ver_devs  = _con_barra(_con_aporte_gap(p["version_devices"], gap_hora_total))
+
+        # Nota explicativa — top 1 de cada dimensión, sin sugerir relación entre ellas
+        nota = None
+        top_canal = next((c for c in canales  if not c["es_otros"]), None)
+        top_vd    = next((v for v in ver_devs if not v["es_otros"]), None)
+
+        if top_canal or top_vd:
+            partes = []
+            if top_canal:
+                partes.append(
+                    f"el canal más afectado fue <b>{top_canal['nombre']}</b> "
+                    f"({top_canal['aporte_gap_fmt']} de indisponibilidad)"
+                )
+            if top_vd:
+                devs = ", ".join(top_vd["devices"]) if top_vd["devices"] else "—"
+                partes.append(
+                    f"la versión <b>{top_vd['version']}</b> en {devs} "
+                    f"concentró {top_vd['aporte_gap_fmt']}"
+                )
+            nota = (
+                "Dentro de esta hora, " + " y ".join(partes) +
+                ". Ambos porcentajes corresponden a atribuciones independientes "
+                "sobre el gap de la hora."
+            )
+
         peaks_data_ctx.append({
-            "num":            i + 1,
-            "fecha_fmt":      p["fecha_fmt"],
-            "hora":           p["hora"],
-            "disp_fmt":       _fmt_pct(p["disponibilidad"], 3),
-            "gap_total_fmt":  _fmt_pct(gap_hora_total, 3),
-            "canales":        _con_barra(p["canales"]),
-            "devices":        _con_barra(p["devices"]),
-            "versiones":      _con_barra(p["versiones"]),
-            "chips":          chips,
+            "num":             i + 1,
+            "fecha_fmt":       p["fecha_fmt"],
+            "hora":            p["hora"],
+            "disp_fmt":        _fmt_pct(p["disponibilidad"], 3),
+            "gap_total_fmt":   _fmt_pct(gap_hora_total, 3),
+            "canales":         canales,
+            "version_devices": ver_devs,
+            "chips":           chips,
+            "nota":            nota,
         })
+
+    # ── Dimensiones del día para el resumen ejecutivo ─────────────
+    gap_total_dia = gap["gap_total"]
+
+    dim_dia_ctx = {
+        "canales": _con_barra(
+            _con_aporte_gap(dim_dia.get("canales", []), gap_total_dia)
+        ),
+        "version_devices": _con_barra(
+            _con_aporte_gap(dim_dia.get("version_devices", []), gap_total_dia)
+        ),
+    }
     
     # Índices de los peaks en el chart
     peak_chart_indices = []
@@ -335,6 +387,9 @@ def _preparar_contexto(
         "gap_total_fmt": _fmt_pct(gap["gap_total"], 2),
         "gap_items":     gap_items,
 
+        # Dimensiones del día
+        "dim_dia": dim_dia_ctx,
+
         # Peak
         "peaks_data": peaks_data_ctx,
         "peak_chart_indices": peak_chart_indices,
@@ -353,6 +408,7 @@ def render_dashboard(
     disponibilidad_final: float,
     gap:                  dict,
     desglose_causas:      dict,
+    dim_dia:              dict,
     tps_list:             list,
     fecha_desde:          str,
     hay_tp:               bool,
@@ -363,8 +419,8 @@ def render_dashboard(
     cfg = _load_config()
     ctx = _preparar_contexto(
         kpis, ts_final, disponibilidad_final,
-        gap, desglose_causas, tps_list, fecha_desde, hay_tp, 
-        peaks_data, cfg,
+        gap, desglose_causas, dim_dia, tps_list, 
+        fecha_desde, hay_tp, peaks_data, cfg,
     )
 
     template_dir = os.path.join(os.path.dirname(__file__), "template")

@@ -61,12 +61,11 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     # 3.5 — Detección de peaks, causas, canales, devices y versiones
     from process.peaks import detectar_peak_diario
-    from sources.npaw  import fetch_errores_por_hora, fetch_por_dimension_hora
+    from sources.npaw  import fetch_errores_por_hora, fetch_por_dimension_hora, fetch_version_device
 
     umbral        = cfg["peaks"]["umbral_diario"]
     max_peaks     = cfg["peaks"]["max_peaks_diario"]
     top_canales   = cfg["peaks"]["top_canales_diario"]
-    top_devices   = cfg["peaks"]["top_devices"]
     top_versiones = cfg["peaks"]["top_versiones"]
 
     peaks_detectados = detectar_peak_diario(
@@ -86,14 +85,9 @@ def run(fecha_desde: str, fecha_hasta: str):
             fecha, hora, "content_channel", top_canales
         )
 
-        # Dispositivos con más errores en esa hora
-        devices = fetch_por_dimension_hora(
-            fecha, hora, "device", top_devices
-        )
-
-        # Versiones de app con más errores en esa hora
-        versiones = fetch_por_dimension_hora(
-            fecha, hora, "app_release_version", top_versiones
+        # Versiones + dispositivos que las usan
+        version_devices = fetch_version_device(
+            fecha, hora=hora, top=top_versiones
         )
 
         # Causas de esa hora
@@ -101,14 +95,13 @@ def run(fecha_desde: str, fecha_hasta: str):
         gap_hora     = calcular_gap(errores_hora, peak["disponibilidad"])
 
         peaks_data.append({
-            "fecha":          fecha,
-            "fecha_fmt":      datetime.strptime(fecha, "%Y-%m-%d").strftime("%d-%b").lower(),
-            "hora":           f"{hora:02d}:00",
-            "disponibilidad": peak["disponibilidad"],
-            "canales":        canales,
-            "devices":        devices,
-            "versiones":      versiones,
-            "gap_hora":       gap_hora,
+            "fecha":           fecha,
+            "fecha_fmt":       datetime.strptime(fecha, "%Y-%m-%d").strftime("%d-%b").lower(),
+            "hora":            f"{hora:02d}:00",
+            "disponibilidad":  peak["disponibilidad"],
+            "canales":         canales,
+            "version_devices": version_devices,
+            "gap_hora":        gap_hora,
         })
 
         print(f"[PEAKS] {fecha} {hora:02d}:00 → detalle completo obtenido")
@@ -122,6 +115,20 @@ def run(fecha_desde: str, fecha_hasta: str):
     # 4. Lista de TPs para el dashboard
     tps_list = get_tps_display(fecha_desde, cfg)
 
+    # 4.5 — Dimensiones del día completo (para el resumen ejecutivo)
+    from sources.npaw import fetch_por_dimension_dia
+
+    gap_total_dia = gap["gap_total"]
+
+    dim_dia = {
+        "canales": fetch_por_dimension_dia(
+            fecha_desde, "content_channel", top_canales, hay_tp
+        ),
+        "version_devices": fetch_version_device(
+            fecha_desde, hora=None, top=top_versiones, excluir_ventana=hay_tp
+        ),
+    }
+
     # 5. Render HTML
     nombre_archivo = f"dashboard_operativo_{fecha_desde}.html"
     output_path    = os.path.join(output_html_dir, nombre_archivo)
@@ -132,6 +139,7 @@ def run(fecha_desde: str, fecha_hasta: str):
         disponibilidad_final = disp_final,
         gap                  = gap,
         desglose_causas      = desglose_causas,
+        dim_dia              = dim_dia,
         tps_list             = tps_list,
         fecha_desde          = fecha_desde,
         hay_tp               = hay_tp,
