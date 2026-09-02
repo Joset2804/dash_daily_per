@@ -255,28 +255,29 @@ def _preparar_contexto(
         canales   = _con_barra(_con_aporte_gap(p["canales"],         gap_hora_total))
         ver_devs  = _con_barra(_con_aporte_gap(p["version_devices"], gap_hora_total))
 
-        # Nota explicativa — top 1 de cada dimensión, sin sugerir relación entre ellas
-        nota = None
+        # Nota explicativa — top 1 de cada dimensión, en líneas separadas
         top_canal = next((c for c in canales  if not c["es_otros"]), None)
         top_vd    = next((v for v in ver_devs if not v["es_otros"]), None)
 
-        if top_canal or top_vd:
-            partes = []
-            if top_canal:
-                partes.append(
-                    f"el canal más afectado fue <b>{top_canal['nombre']}</b> "
-                    f"({top_canal['aporte_gap_fmt']} de indisponibilidad)"
-                )
-            if top_vd:
-                devs = ", ".join(top_vd["devices"]) if top_vd["devices"] else "—"
-                partes.append(
-                    f"la versión <b>{top_vd['version']}</b> en {devs} "
-                    f"concentró {top_vd['aporte_gap_fmt']}"
-                )
-            nota = (
-                "Dentro de esta hora, " + " y ".join(partes) +
-                ". Ambos porcentajes corresponden a atribuciones independientes "
-                "sobre el gap de la hora."
+        nota_canales = None
+        if top_canal:
+            nota_canales = (
+                f"Dentro de esta hora, el canal con mayor afectación fue "
+                f"<b>{top_canal['nombre']}</b> "
+                f'<span class="npct" style="--nc:#002eff;">'
+                f"{top_canal['aporte_gap_fmt']}</span> "
+                f"de indisponibilidad sobre el total de la hora."
+            )
+
+        nota_vd = None
+        if top_vd:
+            devs = ", ".join(top_vd["devices"]) if top_vd["devices"] else "—"
+            nota_vd = (
+                f"En cuanto a dispositivos y versiones, destacó la versión "
+                f"<b>{top_vd['version']}</b> en {devs} "
+                f'<span class="npct" style="--nc:#7c3aed;">'
+                f"{top_vd['aporte_gap_fmt']}</span> "
+                f"de indisponibilidad sobre el total de la hora."
             )
 
         peaks_data_ctx.append({
@@ -288,7 +289,8 @@ def _preparar_contexto(
             "canales":         canales,
             "version_devices": ver_devs,
             "chips":           chips,
-            "nota":            nota,
+            "nota_canales": nota_canales,
+            "nota_vd":      nota_vd,
         })
 
     # ── Dimensiones del día para el resumen ejecutivo ─────────────
