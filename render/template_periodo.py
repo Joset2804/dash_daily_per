@@ -12,6 +12,7 @@ from render.template import (
     _color_var,
     _sdot,
     _con_barra,
+    _con_aporte_gap,
 )
 
 
@@ -113,7 +114,7 @@ def _preparar_contexto_periodo(
     for i, dia in enumerate(dias_afectados):
         gap_dia_total = dia["gap_dia"]["gap_total"]
 
-        # Causas del día: valor + participación sobre el gap del día
+        # Causas del día
         chips = []
         for key in ["FIBRA", "HOMENETWORKING", "SENALES", "INTERNOS", "ZAPPING"]:
             valor = dia["gap_dia"].get(key, 0)
@@ -128,15 +129,48 @@ def _preparar_contexto_periodo(
                 "share_fmt": _fmt_pct(share, 1),
             })
 
+        # Dimensiones con aporte al gap del día
+        canales  = _con_barra(_con_aporte_gap(dia["canales"],         gap_dia_total))
+        ver_devs = _con_barra(_con_aporte_gap(dia["version_devices"], gap_dia_total))
+
+        # Nota extendida: top 3 de cada dimensión, en párrafos separados
+        top_canales_nota = [c for c in canales  if not c["es_otros"]][:3]
+        top_vd_nota      = [v for v in ver_devs if not v["es_otros"]][:3]
+
+        nota_canales = None
+        if top_canales_nota:
+            lista = ", ".join(
+                f'<b>{c["nombre"]}</b> '
+                f'<span class="npct" style="--nc:#002eff;">{c["aporte_gap_fmt"]}</span>'
+                for c in top_canales_nota
+            )
+            nota_canales = (
+                f"Durante esta jornada, los canales con mayor afectación fueron "
+                f"{lista} de indisponibilidad sobre el total del día."
+            )
+
+        nota_vd = None
+        if top_vd_nota:
+            lista = ", ".join(
+                f'la versión <b>{v["version"]}</b> en '
+                f'{", ".join(v["devices"]) if v["devices"] else "—"} '
+                f'<span class="npct" style="--nc:#7c3aed;">{v["aporte_gap_fmt"]}</span>'
+                for v in top_vd_nota
+            )
+            nota_vd = (
+                f"En cuanto a dispositivos y versiones, destacaron {lista} "
+                f"de indisponibilidad sobre el total del día."
+            )
+
         dias_afectados_ctx.append({
-            "num":            i + 1,
-            "fecha":          dia["fecha"],
-            "fecha_fmt":      dia["fecha_fmt"],
-            "disp_fmt":       _fmt_pct(dia["disp_dia"], 2),
-            "disp_raw":       dia["disp_dia"],
-            "hay_tp":         dia["hay_tp"],
-            "horas_bajo_slo": dia["horas_bajo_slo"],
-            "gap_total_fmt":  _fmt_pct(gap_dia_total, 3),
+            "num":             i + 1,
+            "fecha":           dia["fecha"],
+            "fecha_fmt":       dia["fecha_fmt"],
+            "disp_fmt":        _fmt_pct(dia["disp_dia"], 2),
+            "disp_raw":        dia["disp_dia"],
+            "hay_tp":          dia["hay_tp"],
+            "horas_bajo_slo":  dia["horas_bajo_slo"],
+            "gap_total_fmt":   _fmt_pct(gap_dia_total, 3),
             "peaks": [
                 {
                     "hora":     f"{p['hora']:02d}:00",
@@ -144,10 +178,11 @@ def _preparar_contexto_periodo(
                 }
                 for p in dia["peaks"]
             ],
-            "canales":   _con_barra(dia["canales"]),
-            "devices":   _con_barra(dia["devices"]),
-            "versiones": _con_barra(dia["versiones"]),
-            "chips":     chips,
+            "canales":         canales,
+            "version_devices": ver_devs,
+            "chips":           chips,
+            "nota_canales":    nota_canales,
+            "nota_vd":         nota_vd,
         })
 
     # Índices de los días afectados en el chart

@@ -44,12 +44,11 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     # 5.5 — Detección de peaks por día + causas + canales
     from process.peaks import detectar_peaks_periodo
-    from sources.npaw  import fetch_por_dimension_dia
+    from sources.npaw  import fetch_por_dimension_dia, fetch_version_device
 
     umbral            = cfg["peaks"]["umbral_periodo"]
     max_peaks_por_dia = cfg["peaks"]["max_peaks_por_dia"]
     top_canales       = cfg["peaks"]["top_canales_periodo"]
-    top_devices       = cfg["peaks"]["top_devices"]
     top_versiones     = cfg["peaks"]["top_versiones"]
 
     dias_afectados_raw = detectar_peaks_periodo(
@@ -65,32 +64,30 @@ def run(fecha_desde: str, fecha_hasta: str):
         fecha    = dia["fecha"]
         tiene_tp = dia["hay_tp"]
 
-        # Dimensiones del día completo — excluyendo ventana si hay TP
+        # Canales del día completo
         canales = fetch_por_dimension_dia(
             fecha, "content_channel", top_canales, tiene_tp
         )
-        devices = fetch_por_dimension_dia(
-            fecha, "device", top_devices, tiene_tp
-        )
-        versiones = fetch_por_dimension_dia(
-            fecha, "app_release_version", top_versiones, tiene_tp
+
+        # Versiones + dispositivos que las usan
+        version_devices = fetch_version_device(
+            fecha, hora=None, top=top_versiones, excluir_ventana=tiene_tp
         )
 
-        # Causas del día completo (sin excluir ventana, por consistencia con el diario)
+        # Causas del día completo
         errores_dia = fetch_errores_por_codigo(fecha, fecha)
         gap_dia     = calcular_gap(errores_dia, dia["disp_dia"])
 
         dias_afectados.append({
-            "fecha":          fecha,
-            "fecha_fmt":      datetime.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y"),
-            "disp_dia":       dia["disp_dia"],
-            "hay_tp":         tiene_tp,
-            "horas_bajo_slo": dia["horas_bajo_slo"],
-            "peaks":          dia["peaks"],
-            "canales":        canales,
-            "devices":        devices,
-            "versiones":      versiones,
-            "gap_dia":        gap_dia,
+            "fecha":           fecha,
+            "fecha_fmt":       datetime.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y"),
+            "disp_dia":        dia["disp_dia"],
+            "hay_tp":          tiene_tp,
+            "horas_bajo_slo":  dia["horas_bajo_slo"],
+            "peaks":           dia["peaks"],
+            "canales":         canales,
+            "version_devices": version_devices,
+            "gap_dia":         gap_dia,
         })
 
         print(f"[PERIODO] {fecha}: detalle completo obtenido")
