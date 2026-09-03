@@ -80,7 +80,12 @@ def _con_barra(items: list) -> list:
 
     max_pct = max((i.get("pct", 0) for i in items), default=0)
     return [
-        {**i, "bar_w": f"{(i.get('pct', 0) / max_pct * 100):.1f}" if max_pct else "0.0"}
+        {
+            **i,
+            "bar_w":       f"{(i.get('pct', 0) / max_pct * 100):.1f}" if max_pct else "0.0",
+            "errores_fmt": _fmt_num(i.get("errores", 0)),
+            "devices_fmt": ", ".join(i["devices"]) if i.get("devices") else "—",
+        }
         for i in items
     ]
 
@@ -330,6 +335,7 @@ def _preparar_contexto(
                     "descripcion":   c["descripcion"],
                     "gap_fmt":       _fmt_pct(c["gap"], 3),
                     "participacion": c["participacion"],
+                    "participacion_fmt": _fmt_pct(c["participacion"], 1),
                     "acumulado":     c["acumulado"],
                     "es_otros":      c["es_otros"],
                 }
@@ -384,6 +390,7 @@ def _preparar_contexto(
         "chart_data":        chart_data,
         "maint_start_hour":  hora_inicio,
         "maint_end_hour":    hora_fin,
+        "maint_ventana_fmt": f"{hora_inicio:02d}:00 – {hora_fin:02d}:00",
 
         # Gap
         "gap_total_fmt": _fmt_pct(gap["gap_total"], 2),
