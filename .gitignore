@@ -12,4 +12,9 @@ TPs_semana.xlsx
 assets/
 error_lookup.csv
 error_lookup_bk.csv
+error_lookup_new_bk.csv
 README.md
+dashboard_diario.html.j2
+dashboard_periodo.html.j2
+config.yaml
+export/
