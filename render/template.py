@@ -110,8 +110,10 @@ def _preparar_contexto(
     desglose_causas:      dict,
     dim_dia:              dict,
     tps_list:             list,
+    ventanas_extra_list:  list,
     fecha_desde:          str,
     hay_tp:               bool,
+    ventanas:             list,
     peaks_data:           list,
     cfg:                  dict,
 ) -> dict:
@@ -173,14 +175,6 @@ def _preparar_contexto(
     hora_inicio = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
     hora_fin    = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
 
-    chart_maint_indices = (
-        [
-            i for i, (ts, _) in enumerate(ts_final)
-            if hora_inicio <= datetime.utcfromtimestamp(ts / 1000).hour < hora_fin
-        ]
-        if hay_tp else []
-    )
-
     # Suscriptores
     subscribers    = kpis.get("subscribers", 0)
     unique_devices = kpis.get("uniqueDeviceIDs", 0)
@@ -219,14 +213,6 @@ def _preparar_contexto(
         "INTERNOS":       "Errores internos (Backend / DRM / Aplicación)",
         "ZAPPING":        "Efecto Fast Zapping (retry de licencia DRM en zapping rápido)",
     }
-
-    PALETA_PEAKS = [
-    "#dc2626",   # 1° — Rojo
-    "#ea580c",   # 2° — Naranja
-    "#d97706",   # 3° — Ámbar
-    "#16a34a",   # 4° — Verde oscuro
-    "#0284c7",   # 5° — Azul
-    ]
 
     # ── Peaks: numeración, chips de causas y gap horario ──────────
     LABELS_CHIP = {
@@ -352,6 +338,46 @@ def _preparar_contexto(
     # Bajar el mínimo 0.3 para dar aire visual, redondeado hacia abajo a 0.1
     y_min = round(min_valor - 0.3, 1)
 
+    # ── Franjas de mantenimiento para el chart ────────────────────
+    colores_vent   = cfg["tps"]["ventanas_extra"]["colores"]
+    etiquetas_vent = cfg["tps"]["ventanas_extra"]["etiquetas"]
+
+    COLOR_TP_EXCEL     = "rgba(0,46,255,0.16)"
+    ETIQUETA_TP_EXCEL  = "Ventana de mantención programada (02:00 – 06:00)"
+
+    chart_ventanas = []
+    for v in ventanas:
+        if v["origen"] == "excel":
+            color    = COLOR_TP_EXCEL
+            etiqueta = ETIQUETA_TP_EXCEL
+        else:
+            hex_color = colores_vent.get(v["tipo"], "#f59e0b")
+            color     = hex_color + "33"      # ~20% de opacidad
+            etiqueta  = (
+                f"{etiquetas_vent.get(v['tipo'], 'Ventana extraordinaria')} "
+                f"({v['inicio']:02d}:00 – {v['fin']:02d}:00)"
+            )
+        chart_ventanas.append({
+            "inicio":   v["inicio"],
+            "fin":      v["fin"],
+            "color":    color,
+            "etiqueta": etiqueta,
+            "tipo":     v["tipo"],
+        })
+
+    # Leyenda sin duplicados por tipo
+    leyenda_ventanas = []
+    vistos = set()
+    for cv in chart_ventanas:
+        if cv["tipo"] in vistos:
+            continue
+        vistos.add(cv["tipo"])
+        leyenda_ventanas.append({
+            "color":    cv["color"],
+            "etiqueta": etiquetas_vent.get(cv["tipo"], ETIQUETA_TP_EXCEL)
+                        if cv["tipo"] != "tp_excel" else ETIQUETA_TP_EXCEL,
+        })
+
     return {
         # Imágenes
         "logo_emp_b64": _b64(cfg["assets"]["logo_emp"]),
@@ -388,8 +414,8 @@ def _preparar_contexto(
         # Chart
         "chart_labels":      chart_labels,
         "chart_data":        chart_data,
-        "maint_start_hour":  hora_inicio,
-        "maint_end_hour":    hora_fin,
+        "chart_ventanas":    chart_ventanas,
+        "leyenda_ventanas":  leyenda_ventanas,
         "maint_ventana_fmt": f"{hora_inicio:02d}:00 – {hora_fin:02d}:00",
 
         # Gap
@@ -404,7 +430,9 @@ def _preparar_contexto(
         "peak_chart_indices": peak_chart_indices,
 
         # TPs
-        "tps_list": tps_list,
+        "tps_list":            tps_list,
+        "ventanas_extra_list": ventanas_extra_list,
+        "total_trabajos":      len(tps_list) + len(ventanas_extra_list),
 
         # Eje Y dinámico
         "chart_y_min": y_min,
@@ -419,8 +447,10 @@ def render_dashboard(
     desglose_causas:      dict,
     dim_dia:              dict,
     tps_list:             list,
+    ventanas_extra_list:  list,
     fecha_desde:          str,
     hay_tp:               bool,
+    ventanas:             list,
     peaks_data:           list,
     output_path:          str,
 ) -> str:
@@ -428,8 +458,8 @@ def render_dashboard(
     cfg = _load_config()
     ctx = _preparar_contexto(
         kpis, ts_final, disponibilidad_final,
-        gap, desglose_causas, dim_dia, tps_list, 
-        fecha_desde, hay_tp, peaks_data, cfg,
+        gap, desglose_causas, dim_dia, tps_list, ventanas_extra_list,
+        fecha_desde, hay_tp, ventanas, peaks_data, cfg,
     )
 
     template_dir = os.path.join(os.path.dirname(__file__), "template")

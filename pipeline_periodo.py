@@ -10,6 +10,7 @@ from process.periodo import (
 )
 from sources.npaw    import fetch_kpis, fetch_errores_por_codigo, fetch_canales_por_hora
 from process.peaks  import detectar_peaks_periodo
+from process.ventanas import get_ventanas_extra_display
 
 # Run completo
 def run(fecha_desde: str, fecha_hasta: str):
@@ -62,16 +63,16 @@ def run(fecha_desde: str, fecha_hasta: str):
     dias_afectados = []
     for dia in dias_afectados_raw:
         fecha    = dia["fecha"]
-        tiene_tp = dia["hay_tp"]
+        ventanas = dia["ventanas"]
 
-        # Canales del día completo
+        # Canales del día, excluyendo todas las ventanas
         canales = fetch_por_dimension_dia(
-            fecha, "content_channel", top_canales, tiene_tp
+            fecha, "content_channel", top_canales, ventanas
         )
 
-        # Versiones + dispositivos que las usan
+        # Versiones + dispositivos
         version_devices = fetch_version_device(
-            fecha, hora=None, top=top_versiones, excluir_ventana=tiene_tp
+            fecha, hora=None, top=top_versiones, ventanas=ventanas
         )
 
         # Causas del día completo
@@ -82,7 +83,8 @@ def run(fecha_desde: str, fecha_hasta: str):
             "fecha":           fecha,
             "fecha_fmt":       datetime.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y"),
             "disp_dia":        dia["disp_dia"],
-            "hay_tp":          tiene_tp,
+            "hay_ventanas":    dia["hay_ventanas"],
+            "ventanas":        ventanas,
             "horas_bajo_slo":  dia["horas_bajo_slo"],
             "peaks":           dia["peaks"],
             "canales":         canales,
@@ -94,8 +96,9 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     print(f"[PERIODO] {len(dias_afectados)} días afectados con detalle completo")
 
-    # 6. Lista de TPs del período
+    # 6. Lista de TPs del período + extras
     tps_list = get_tps_display_periodo(fecha_desde, fecha_hasta, cfg)
+    ventanas_extra_list = get_ventanas_extra_display(fecha_desde, fecha_hasta, cfg)
 
     # 7. Render HTML
     from render.template_periodo import render_dashboard_periodo
@@ -111,6 +114,7 @@ def run(fecha_desde: str, fecha_hasta: str):
         gap          = gap,
         desglose_causas = desglose_causas,
         tps_list     = tps_list,
+        ventanas_extra_list = ventanas_extra_list,
         fecha_label  = fecha_label,
         hay_tp       = hay_tp,
         dias_afectados = dias_afectados,

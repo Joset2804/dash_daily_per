@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from sources.npaw import fetch_timeseries_dia, fetch_timeseries,_load_config
+from process.ventanas import get_ventanas_dia, correccion_para_hora
+
 
 # Configuración
 def _load_config() -> dict:
@@ -108,7 +110,7 @@ def calcular_disponibilidad_periodo(
         for fecha, valor in ts_dia.get("metric_6323436ccf03", [])
     }
 
-    # Fetch horario siempre: se usa para corregir días con TP y para detectar peaks
+    # Fetch horario — siempre, porque puede haber ventanas extra sin TP
     ts_hora = fetch_timeseries(fecha_desde, fecha_hasta)
     por_dia_horas = {}
     for ts_ms, valor in ts_hora:
@@ -121,14 +123,16 @@ def calcular_disponibilidad_periodo(
     # Calcular disponibilidad por día
     disp_por_dia = []
     for fecha in sorted(disp_por_dia_api.keys()):
-        if fecha in dias_con_tp and fecha in por_dia_horas:
+        ventanas = get_ventanas_dia(fecha, fecha in dias_con_tp, cfg)
+
+        if ventanas and fecha in por_dia_horas:
             horas = por_dia_horas[fecha]
-            horas_corregidas = [
-                val_min if (hora_inicio <= h < hora_fin and v < val_min) else v
-                for h, v in horas
-            ]
+            horas_corregidas = []
+            for h, v in horas:
+                corr = correccion_para_hora(h, ventanas)
+                horas_corregidas.append(corr if corr is not None and v < corr else v)
             valor_dia = _redondear(_promedio(horas_corregidas), 2)
-            print(f"[PERIODO] {fecha}: disp={valor_dia}% (corregido)")
+            print(f"[PERIODO] {fecha}: disp={valor_dia}% (corregido, {len(ventanas)} ventana(s))")
         else:
             valor_dia = _redondear(disp_por_dia_api[fecha], 2)
             print(f"[PERIODO] {fecha}: disp={valor_dia}% (API)")

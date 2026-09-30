@@ -24,6 +24,7 @@ def _preparar_contexto_periodo(
     gap:          dict,
     desglose_causas: dict,
     tps_list:     list,
+    ventanas_extra_list: list,
     fecha_label:  str,
     hay_tp:       bool,
     dias_afectados:   list,
@@ -85,11 +86,68 @@ def _preparar_contexto_periodo(
     ]
     chart_data = [v for _, v in disp_por_dia]
 
-    # Índices de días con TP para la franja azul
-    chart_maint_indices = [
-        i for i, (fecha, _) in enumerate(disp_por_dia)
-        if fecha in dias_con_tp
-    ]
+    # Franjas de mantenimiento del período
+    colores_vent   = cfg["tps"]["ventanas_extra"]["colores"]
+    etiquetas_vent = cfg["tps"]["ventanas_extra"]["etiquetas"]
+
+    COLOR_TP_EXCEL    = "rgba(0,46,255,0.16)"
+    ETIQUETA_TP_EXCEL = "Ventana de mantención programada"
+
+    # Índice de cada día en el eje X
+    fechas_dias = [fecha for fecha, _ in disp_por_dia]
+
+    # Un día puede tener varias ventanas de tipos distintos:
+    # se pinta con el color de la primera ventana no-excel que tenga,
+    # o azul si solo tiene la del Excel
+    chart_ventanas  = []
+    tipos_presentes = set()
+
+    for dia in dias_afectados:
+        if dia["fecha"] not in fechas_dias:
+            continue
+        idx = fechas_dias.index(dia["fecha"])
+
+        ventanas_dia = dia.get("ventanas", [])
+        if not ventanas_dia:
+            continue
+
+        # Tipos únicos del día, en orden estable
+        tipos_dia = []
+        for v in ventanas_dia:
+            tipo = "tp_excel" if v["origen"] == "excel" else v["tipo"]
+            if tipo not in tipos_dia:
+                tipos_dia.append(tipo)
+
+        n = len(tipos_dia)
+        for pos, tipo in enumerate(tipos_dia):
+            if tipo == "tp_excel":
+                color = COLOR_TP_EXCEL
+            else:
+                color = colores_vent.get(tipo, "#f59e0b") + "44"
+
+            chart_ventanas.append({
+                "indice": idx,
+                "color":  color,
+                "tipo":   tipo,
+                "pos":    pos,    # posición dentro de la franja del día
+                "total":  n,      # cuántas sub-franjas tiene ese día
+            })
+            tipos_presentes.add(tipo)
+
+    # Leyenda sin duplicados
+    leyenda_ventanas = []
+    for tipo in tipos_presentes:
+        if tipo == "tp_excel":
+            leyenda_ventanas.append({
+                "color":    COLOR_TP_EXCEL,
+                "etiqueta": ETIQUETA_TP_EXCEL,
+            })
+        else:
+            hex_color = colores_vent.get(tipo, "#f59e0b")
+            leyenda_ventanas.append({
+                "color":    hex_color + "33",
+                "etiqueta": etiquetas_vent.get(tipo, "Ventana extraordinaria"),
+            })
 
     # Días afectados: colores, formato y chips de causas
 
@@ -162,13 +220,37 @@ def _preparar_contexto_periodo(
                 f"de indisponibilidad sobre el total del día."
             )
 
+        # Chips de ventanas para el summary del acordeón
+        ETIQUETAS_CHIP = {
+            "tp_excel":            "Con TP",
+            "mantenimiento":       "Con TP extra",
+            "interferencia_solar": "Con interferencia solar",
+        }
+        COLORES_CHIP = {
+            "tp_excel":            "#002eff",
+            "mantenimiento":       colores_vent.get("mantenimiento", "#f59e0b"),
+            "interferencia_solar": colores_vent.get("interferencia_solar", "#f97316"),
+        }
+
+        chips_ventana = []
+        tipos_vistos  = set()
+        for v in dia.get("ventanas", []):
+            tipo = "tp_excel" if v["origen"] == "excel" else v["tipo"]
+            if tipo in tipos_vistos:
+                continue
+            tipos_vistos.add(tipo)
+            chips_ventana.append({
+                "label": ETIQUETAS_CHIP.get(tipo, "Con ventana"),
+                "color": COLORES_CHIP.get(tipo, "#64748b"),
+            })
+
         dias_afectados_ctx.append({
             "num":             i + 1,
             "fecha":           dia["fecha"],
             "fecha_fmt":       dia["fecha_fmt"],
             "disp_fmt":        _fmt_pct(dia["disp_dia"], 2),
             "disp_raw":        dia["disp_dia"],
-            "hay_tp":          dia["hay_tp"],
+            "chips_ventana": chips_ventana,
             "horas_bajo_slo":  dia["horas_bajo_slo"],
             "gap_total_fmt":   _fmt_pct(gap_dia_total, 3),
             "peaks": [
@@ -284,15 +366,18 @@ def _preparar_contexto_periodo(
         # Chart
         "chart_labels":        chart_labels,
         "chart_data":          chart_data,
-        "chart_maint_indices": chart_maint_indices,
+        "chart_ventanas":   chart_ventanas,
+        "leyenda_ventanas": leyenda_ventanas,
         "chart_y_min":         y_min,
 
         # Gap
         "gap_total_fmt": _fmt_pct(gap["gap_total"], 2),
         "gap_items":     gap_items,
 
-        # TPs
-        "tps_list": tps_list,
+        # TPs y ventanas
+        "tps_list":            tps_list,
+        "ventanas_extra_list": ventanas_extra_list,
+        "total_trabajos":      len(tps_list) + len(ventanas_extra_list),
         
         # Peaks
         # Días afectados
@@ -309,6 +394,7 @@ def render_dashboard_periodo(
     gap:          dict,
     desglose_causas: dict,
     tps_list:     list,
+    ventanas_extra_list: list,
     fecha_label:  str,
     hay_tp:       bool,
     dias_afectados:   list,
@@ -317,7 +403,7 @@ def render_dashboard_periodo(
     cfg = _load_config()
     ctx = _preparar_contexto_periodo(
         kpis, disp_por_dia, dias_con_tp,
-        gap, desglose_causas, tps_list, fecha_label, 
+        gap, desglose_causas, tps_list, ventanas_extra_list, fecha_label, 
         hay_tp, dias_afectados, cfg,
     )
 

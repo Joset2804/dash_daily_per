@@ -334,24 +334,21 @@ def fetch_por_dimension_hora(
 # Errores agrupados por una dimensión para un día completo
 # Si el día tiene TP, excluye la ventana de mantenimiento con dos llamadas
 def fetch_por_dimension_dia(
-    fecha:           str,
-    dimension:       str,
-    top:             int  = 3,
-    excluir_ventana: bool = False,
+    fecha:     str,
+    dimension: str,
+    top:       int  = 3,
+    ventanas:  list = None,
 ) -> list[dict]:
 
     cfg = _load_config()
 
-    # Rangos a consultar
-    if excluir_ventana:
-        hora_inicio = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
-        hora_fin    = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
-        rangos = [
-            (f"{fecha} 00:00:00", f"{fecha} {hora_inicio - 1:02d}:59:59"),
-            (f"{fecha} {hora_fin:02d}:00:00", f"{fecha} 23:59:59"),
-        ]
-    else:
-        rangos = [(f"{fecha} 00:00:00", f"{fecha} 23:59:59")]
+    # Rangos a consultar — excluye todas las ventanas de mantenimiento del día
+    from process.ventanas import rangos_fuera_ventana
+    rangos = rangos_fuera_ventana(fecha, ventanas or [])
+
+    if not rangos:
+        print(f"[NPAW] {dimension} {fecha}: día completo en ventana, sin datos")
+        return []
 
     # Acumular errores por nombre a través de todos los rangos
     acumulado = {}
@@ -421,18 +418,18 @@ def fetch_por_dimension_dia(
             "es_otros": True,
         })
 
-    sufijo = " (sin ventana mant.)" if excluir_ventana else ""
-    print(f"[NPAW] {dimension} {fecha}{sufijo}: "
+    suf = f" ({len(ventanas)} ventana(s) excluida(s))" if ventanas else ""
+    print(f"[NPAW] {dimension} {fecha}{suf}: "
           f"{len(resultado)} ítems (total {total} errores)")
     return resultado
 
 
 # Errores agrupados por versión de app + dispositivo
 def fetch_version_device(
-    fecha:           str,
-    hora:            int  = None,
-    top:             int  = 3,
-    excluir_ventana: bool = False,
+    fecha:    str,
+    hora:     int  = None,
+    top:      int  = 3,
+    ventanas: list = None,
 ) -> list[dict]:
 
     cfg = _load_config()
@@ -440,15 +437,12 @@ def fetch_version_device(
     # Rangos a consultar
     if hora is not None:
         rangos = [(f"{fecha} {hora:02d}:00:00", f"{fecha} {hora:02d}:59:59")]
-    elif excluir_ventana:
-        h_ini = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
-        h_fin = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
-        rangos = [
-            (f"{fecha} 00:00:00", f"{fecha} {h_ini - 1:02d}:59:59"),
-            (f"{fecha} {h_fin:02d}:00:00", f"{fecha} 23:59:59"),
-        ]
     else:
-        rangos = [(f"{fecha} 00:00:00", f"{fecha} 23:59:59")]
+        from process.ventanas import rangos_fuera_ventana
+        rangos = rangos_fuera_ventana(fecha, ventanas or [])
+        if not rangos:
+            print(f"[NPAW] version·device {fecha}: día completo en ventana, sin datos")
+            return []
 
     # Acumular por (versión, device)
     acumulado = {}
@@ -544,7 +538,7 @@ def fetch_version_device(
         })
 
     ctx = f"{hora:02d}:00" if hora is not None else "día"
-    suf = " (sin ventana mant.)" if excluir_ventana and hora is None else ""
+    suf = f" ({len(ventanas)} ventana(s) excluida(s))" if ventanas and hora is None else ""
     print(f"[NPAW] version·device {fecha} {ctx}{suf}: "
           f"{len(resultado)} versiones (total {total} errores)")
     return resultado

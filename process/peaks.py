@@ -1,6 +1,7 @@
 import os
 import yaml
 from datetime import datetime
+from process.ventanas import get_ventanas_dia, hora_en_ventana
 
 # Cargar configuración
 def _load_config() -> dict:
@@ -14,11 +15,11 @@ def _ts_a_hora(timestamp_ms: int) -> int:
     return datetime.utcfromtimestamp(timestamp_ms / 1000).hour
 
 # Retorna True si la hora está dentro de la ventana de mantenimiento
-def _hora_en_ventana(hora: int, cfg: dict) -> bool:
-    
-    inicio = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
-    fin    = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
-    return inicio <= hora < fin
+#def _hora_en_ventana(hora: int, cfg: dict) -> bool:
+#    
+#    inicio = cfg["tps"]["ventana_mantenimiento"]["hora_inicio"]
+#    fin    = cfg["tps"]["ventana_mantenimiento"]["hora_fin"]
+#    return inicio <= hora < fin
 
 # Detecta el peak horario más bajo del día por debajo del umbral
 # Excluyendo horas de ventana de mantenimiento si hay TP
@@ -48,23 +49,23 @@ def _hora_en_ventana(hora: int, cfg: dict) -> bool:
 #          f"{peak['hora']:02d}:00 → {peak['disponibilidad']}%")
 #    return peak
 
-# Detecta los peaks horario más bajo del día por debajo del umbral
-# Excluyendo horas de ventana de mantenimiento si hay TP
+# Detecta los N peaks más bajos del día por debajo del umbral
+# excluyendo las horas que caen dentro de alguna ventana de mantenimiento
 def detectar_peak_diario(
     timeseries: list,
-    hay_tp:     bool,
+    ventanas:   list  = None,
     umbral:     float = 99.70,
     max_peaks:  int   = 3,
 ) -> list:
 
-    cfg = _load_config()
+    ventanas = ventanas or []
 
     candidatos = []
     for ts_ms, valor in timeseries:
         if valor >= umbral:
             continue
         hora = _ts_a_hora(ts_ms)
-        if hay_tp and _hora_en_ventana(hora, cfg):
+        if hora_en_ventana(hora, ventanas):
             continue
         fecha = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
         candidatos.append({"fecha": fecha, "hora": hora, "disponibilidad": valor})
@@ -72,7 +73,6 @@ def detectar_peak_diario(
     if not candidatos:
         return []
 
-    # Ordenar de menor a mayor disponibilidad y tomar los N peores
     peaks = sorted(candidatos, key=lambda x: x["disponibilidad"])[:max_peaks]
 
     for p in peaks:
@@ -80,8 +80,8 @@ def detectar_peak_diario(
               f"{p['hora']:02d}:00 → {p['disponibilidad']}%")
     return peaks
 
-# Detecta el peak horario más bajo de cada día del período por debajo del umbral
-# Excluyendo horas de ventana de mantenimiento si hay TP
+# Para cada día con disponibilidad bajo el umbral, detecta los N peaks horarios
+# más bajos excluyendo las horas dentro de ventanas de mantenimiento.
 def detectar_peaks_periodo(
     disp_por_dia:  list,
     ts_hora_raw:   list,
@@ -108,35 +108,35 @@ def detectar_peaks_periodo(
             continue
 
         horas_dia = por_dia.get(fecha, [])
-        tiene_tp  = fecha in dias_con_tp
+        ventanas  = get_ventanas_dia(fecha, fecha in dias_con_tp, cfg)
 
-        # Candidatos: horas bajo umbral, excluyendo ventana si hay TP
         candidatos = []
         for hora, valor in horas_dia:
             if valor >= umbral:
                 continue
-            if tiene_tp and _hora_en_ventana(hora, cfg):
+            if hora_en_ventana(hora, ventanas):
                 continue
             candidatos.append({"hora": hora, "disponibilidad": valor})
 
         if not candidatos:
             print(f"[PEAKS] {fecha}: disp {disp_dia}% pero sin horas válidas "
-                  f"fuera de ventana de mantenimiento")
+                  f"fuera de las ventanas de mantención")
             continue
 
-        # Ordenar de menor a mayor y tomar los N peores
         peaks = sorted(candidatos, key=lambda x: x["disponibilidad"])[:max_peaks]
 
         dias_afectados.append({
             "fecha":          fecha,
             "disp_dia":       disp_dia,
-            "hay_tp":         tiene_tp,
+            "hay_ventanas":   len(ventanas) > 0,
+            "ventanas":       ventanas,
             "horas_bajo_slo": len(candidatos),
             "peaks":          peaks,
         })
 
         print(f"[PEAKS] {fecha}: disp={disp_dia}% | "
               f"{len(candidatos)} hrs bajo SLO | "
+              f"{len(ventanas)} ventana(s) | "
               f"peor peak {peaks[0]['hora']:02d}:00 → {peaks[0]['disponibilidad']}%")
 
     return dias_afectados

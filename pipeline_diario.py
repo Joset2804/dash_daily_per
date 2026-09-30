@@ -10,6 +10,8 @@ from render.template    import render_dashboard
 from process.peaks import detectar_peak_diario
 from playwright.sync_api import sync_playwright
 from datetime import datetime
+from process.ventanas import get_ventanas_extra_display
+
 
 # Captura el dashboard HTML como PNG a ancho fijo
 def capturar_screenshot(html_path: str, output_path: str, ancho: int = None):
@@ -53,7 +55,7 @@ def run(fecha_desde: str, fecha_hasta: str):
     errores = fetch_errores_por_codigo(fecha_desde, fecha_hasta)
 
     # 2. Corrección TPs
-    ts_final, disp_final, hay_tp = aplicar_tps(
+    ts_final, disp_final, hay_tp, ventanas = aplicar_tps(
         timeseries         = ts_raw,
         disponibilidad_api = kpis["metric_6323436ccf03"],
         fecha              = fecha_desde,
@@ -70,7 +72,7 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     peaks_detectados = detectar_peak_diario(
         ts_raw,
-        hay_tp    = hay_tp,
+        ventanas  = ventanas,
         umbral    = umbral,
         max_peaks = max_peaks,
     )
@@ -114,18 +116,17 @@ def run(fecha_desde: str, fecha_hasta: str):
 
     # 4. Lista de TPs para el dashboard
     tps_list = get_tps_display(fecha_desde, cfg)
+    ventanas_extra_list = get_ventanas_extra_display(fecha_desde, fecha_desde, cfg)
 
     # 4.5 — Dimensiones del día completo (para el resumen ejecutivo)
     from sources.npaw import fetch_por_dimension_dia
 
-    gap_total_dia = gap["gap_total"]
-
     dim_dia = {
         "canales": fetch_por_dimension_dia(
-            fecha_desde, "content_channel", top_canales, hay_tp
+            fecha_desde, "content_channel", top_canales, ventanas
         ),
         "version_devices": fetch_version_device(
-            fecha_desde, hora=None, top=top_versiones, excluir_ventana=hay_tp
+            fecha_desde, hora=None, top=top_versiones, ventanas=ventanas
         ),
     }
 
@@ -141,9 +142,11 @@ def run(fecha_desde: str, fecha_hasta: str):
         desglose_causas      = desglose_causas,
         dim_dia              = dim_dia,
         tps_list             = tps_list,
+        ventanas_extra_list  = ventanas_extra_list,
         fecha_desde          = fecha_desde,
         hay_tp               = hay_tp,
-        peaks_data            = peaks_data,
+        ventanas             = ventanas, 
+        peaks_data           = peaks_data,
         output_path          = output_path,
     )
 

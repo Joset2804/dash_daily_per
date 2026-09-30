@@ -4,6 +4,7 @@ import yaml
 import pytz
 import pandas as pd
 from datetime import datetime
+from process.ventanas import get_ventanas_dia, correccion_para_hora
 
 # Carga la configuración desde config.yaml
 def _load_config() -> dict:
@@ -36,70 +37,65 @@ def _hora_chile(timestamp_ms: int) -> int:
     return datetime.utcfromtimestamp(timestamp_ms / 1000).hour
 
 
-# Corrección de la timeseries según la ventana de mantenimiento y el valor mínimo de disponibilidad
-"""
-Para cada hora dentro de la ventana de mantenimiento:
-  - valor < disponibilidad_correccion → forzar al valor mínimo
-  - valor >= disponibilidad_correccion → dejar igual
-Fuera de la ventana → no tocar.
-"""
-def _corregir_timeseries(timeseries: list, cfg: dict) -> list:
-
-    tps_cfg     = cfg["tps"]
-    hora_inicio = tps_cfg["ventana_mantenimiento"]["hora_inicio"]
-    hora_fin    = tps_cfg["ventana_mantenimiento"]["hora_fin"]
-    val_min     = tps_cfg["disponibilidad_correccion"]
+# Aplica la corrección de disponibilidad a las horas que caen dentro
+# de alguna ventana de mantenimiento del día.
+# Si una hora cae en varias ventanas solapadas, aplica la corrección más alta.
+def _corregir_timeseries(timeseries: list, ventanas: list) -> list:
 
     resultado = []
     for ts_ms, valor in timeseries:
-        hora = _hora_chile(ts_ms)
-        if hora_inicio <= hora < hora_fin and valor < val_min:
-            resultado.append((ts_ms, val_min))
+        hora       = _hora_chile(ts_ms)
+        correccion = correccion_para_hora(hora, ventanas)
+
+        if correccion is not None and valor < correccion:
+            resultado.append((ts_ms, correccion))
         else:
             resultado.append((ts_ms, valor))
     return resultado
 
 # Evalúa si existe un TP con impacto para la fecha y aplica la corrección correspondiente
+"""
+Evalúa las ventanas de mantenimiento del día (TP del Excel + ventanas extra)
+y aplica la corrección correspondiente.
+
+Returns:
+    (timeseries_final, disponibilidad_final, hay_ventanas, ventanas)
+
+    - timeseries_final:     lista corregida o sin cambios
+    - disponibilidad_final: promedio de horas corregidas, o valor API si no hay ventanas
+    - hay_ventanas:         True si hubo al menos una ventana
+    - ventanas:             lista de ventanas del día (para propagar al resto del pipeline)
+"""
 def aplicar_tps(
     timeseries:         list,
     disponibilidad_api: float,
     fecha:              str,
 ) -> tuple:
-    """
-    Evalúa si existe un TP con impacto para la fecha y aplica
-    la corrección correspondiente.
 
-    Args:
-        timeseries:         [(timestamp_ms, valor), ...] de fetch_timeseries()
-        disponibilidad_api: metric_6323436ccf03 directo de la API
-        fecha:              "YYYY-MM-DD"
-
-    Returns:
-        (timeseries_final, disponibilidad_final, hay_impacto)
-
-        - timeseries_final:     lista corregida o sin cambios
-        - disponibilidad_final: promedio de horas corregidas o valor API
-        - hay_impacto:          True si hubo corrección
-    """
     cfg = _load_config()
 
-    hay_impacto = _hay_tp_con_impacto(fecha, cfg)
+    hay_tp   = _hay_tp_con_impacto(fecha, cfg)
+    ventanas = get_ventanas_dia(fecha, hay_tp, cfg)
 
-    if not hay_impacto:
-        print(f"[TPS] {fecha}: sin TPs con impacto — usando disponibilidad API: {disponibilidad_api}%")
-        return timeseries, disponibilidad_api, False
+    if not ventanas:
+        print(f"[TPS] {fecha}: sin ventanas de mantención — "
+              f"usando disponibilidad API: {disponibilidad_api}%")
+        return timeseries, disponibilidad_api, False, []
 
-    # Corregir timeseries
-    ts_corregida = _corregir_timeseries(timeseries, cfg)
+    # Log de las ventanas detectadas
+    for v in ventanas:
+        print(f"[TPS] {fecha}: ventana {v['inicio']:02d}:00–{v['fin'] - 1:02d}:59 "
+              f"({v['tipo']}) → corrección {v['correccion']}%")
 
-    # Nueva disponibilidad = promedio simple de las 24 horas corregidas
+    ts_corregida = _corregir_timeseries(timeseries, ventanas)
+
     valores = [v for _, v in ts_corregida]
     disponibilidad_corregida = round(sum(valores) / len(valores), 4)
 
-    print(f"[TPS] {fecha}: TP con impacto detectado")
-    print(f"[TPS] Disponibilidad API={disponibilidad_api}% → corregida={disponibilidad_corregida}%")
+    print(f"[TPS] {fecha}: disponibilidad API={disponibilidad_api}% "
+          f"→ corregida={disponibilidad_corregida}%")
 
-    return ts_corregida, disponibilidad_corregida, True
+    return ts_corregida, disponibilidad_corregida, True, ventanas
 
 # Retorna la lista de TPs del día para mostrar en el dashboard
 def get_tps_display(fecha: str, cfg: dict = None) -> list:
