@@ -8,7 +8,7 @@ from process.periodo import (
     calcular_launcher_periodo,
     get_tps_display_periodo,
 )
-from sources.npaw    import fetch_kpis, fetch_errores_por_codigo, fetch_canales_por_hora
+from sources.npaw    import fetch_kpis, fetch_errores_por_codigo, fetch_errores_por_codigo_dia
 from process.peaks  import detectar_peaks_periodo
 from process.ventanas import get_ventanas_extra_display
 
@@ -75,8 +75,8 @@ def run(fecha_desde: str, fecha_hasta: str):
             fecha, hora=None, top=top_versiones, ventanas=ventanas
         )
 
-        # Causas del día completo
-        errores_dia = fetch_errores_por_codigo(fecha, fecha)
+        # Causas del día, excluyendo las mismas ventanas que canales y versión·dispositivo
+        errores_dia = fetch_errores_por_codigo_dia(fecha, ventanas)
         gap_dia     = calcular_gap(errores_dia, dia["disp_dia"])
 
         dias_afectados.append({

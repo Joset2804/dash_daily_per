@@ -542,3 +542,47 @@ def fetch_version_device(
     print(f"[NPAW] version·device {fecha} {ctx}{suf}: "
           f"{len(resultado)} versiones (total {total} errores)")
     return resultado
+
+# Errores agrupados por código para un día, excluyendo las ventanas de mantención
+def fetch_errores_por_codigo_dia(
+    fecha:    str,
+    ventanas: list = None,
+) -> list[dict]:
+
+    cfg = _load_config()
+
+    from process.ventanas import rangos_fuera_ventana
+    rangos = rangos_fuera_ventana(fecha, ventanas or [])
+
+    if not rangos:
+        print(f"[NPAW] Errores por código {fecha}: día completo en ventana, sin datos")
+        return []
+
+    # Acumular cantidades por código a través de todos los rangos
+    acumulado = {}
+    for from_date, to_date in rangos:
+        params = [
+            ("fromDate",        from_date),
+            ("toDate",          to_date),
+            ("metrics",         "errors"),
+            ("groupBy",         "error_name"),
+            ("orderBy",         "errors"),
+            ("orderDirection",  "desc"),
+            ("limit",           "100"),
+            ("filter",          _build_filter(cfg)),
+        ]
+        raw = _get(params, cfg)
+
+        for e in _parse_errores(raw):
+            codigo = e["codigo"]
+            acumulado[codigo] = acumulado.get(codigo, 0) + (e["cantidad"] or 0)
+
+    errores = sorted(
+        [{"codigo": c, "cantidad": n} for c, n in acumulado.items() if n > 0],
+        key=lambda x: x["cantidad"],
+        reverse=True,
+    )
+
+    suf = f" ({len(ventanas)} ventana(s) excluida(s), {len(rangos)} llamada(s))" if ventanas else ""
+    print(f"[NPAW] Errores por código {fecha}{suf}: {len(errores)} códigos")
+    return errores

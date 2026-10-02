@@ -3,7 +3,7 @@ import yaml
 #import argparse
 #from datetime import date, timedelta
 
-from sources.npaw       import fetch_kpis, fetch_timeseries, fetch_errores_por_codigo, fetch_canales_por_hora
+from sources.npaw       import fetch_kpis, fetch_timeseries, fetch_errores_por_codigo, fetch_errores_por_codigo_dia
 from process.tps        import aplicar_tps, get_tps_display, _load_config
 from process.gap        import calcular_gap, calcular_desglose_causas
 from render.template    import render_dashboard
@@ -52,7 +52,6 @@ def run(fecha_desde: str, fecha_hasta: str):
     # 1. Datos NPAW
     kpis    = fetch_kpis(fecha_desde, fecha_hasta)
     ts_raw  = fetch_timeseries(fecha_desde, fecha_hasta)
-    errores = fetch_errores_por_codigo(fecha_desde, fecha_hasta)
 
     # 2. Corrección TPs
     ts_final, disp_final, hay_tp, ventanas = aplicar_tps(
@@ -108,8 +107,9 @@ def run(fecha_desde: str, fecha_hasta: str):
 
         print(f"[PEAKS] {fecha} {hora:02d}:00 → detalle completo obtenido")
 
-    # 3. Desglose del gap
-    gap = calcular_gap(errores, disp_final)
+    # 3. Errores del día excluyendo ventanas de mantención + desglose del gap
+    errores = fetch_errores_por_codigo_dia(fecha_desde, ventanas)
+    gap     = calcular_gap(errores, disp_final)
 
     # 3.6. Desglose Pareto de causas por categoría
     desglose_causas = calcular_desglose_causas(errores, disp_final, cfg)
