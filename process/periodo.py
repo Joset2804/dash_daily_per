@@ -94,6 +94,7 @@ def get_tps_display_periodo(fecha_desde: str, fecha_hasta: str, cfg: dict = None
 def calcular_disponibilidad_periodo(
     fecha_desde: str,
     fecha_hasta: str,
+    ts_dia: dict = None,
 ) -> tuple:
     cfg         = _load_config()
     dias_con_tp = _get_dias_con_tp(fecha_desde, fecha_hasta, cfg)
@@ -104,7 +105,9 @@ def calcular_disponibilidad_periodo(
     val_min     = cfg["tps"]["disponibilidad_correccion"]
 
     # Fetch diario desde npaw.py
-    ts_dia = fetch_timeseries_dia(fecha_desde, fecha_hasta)
+    if ts_dia is None:
+        ts_dia = fetch_timeseries_dia(fecha_desde, fecha_hasta)
+
     disp_por_dia_api = {
         fecha: valor
         for fecha, valor in ts_dia.get("metric_6323436ccf03", [])
@@ -148,8 +151,10 @@ def calcular_disponibilidad_periodo(
 def calcular_launcher_periodo(
     fecha_desde: str,
     fecha_hasta: str,
+    ts_dia: dict = None,
 ) -> tuple:
-    ts_dia = fetch_timeseries_dia(fecha_desde, fecha_hasta)
+    if ts_dia is None:
+        ts_dia = fetch_timeseries_dia(fecha_desde, fecha_hasta)
     launcher_por_dia = ts_dia.get("metric_dbbf01e41a88", [])
     launcher_final   = _promedio([v for _, v in launcher_por_dia])
     print(f"[PERIODO] Launcher promedio: {launcher_final}%")

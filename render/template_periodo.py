@@ -15,6 +15,48 @@ from render.template import (
     _con_aporte_gap,
 )
 
+# Convierte un valor de NPAW a la unidad que muestra la tarjeta
+# (ej. Join Time: 0.914 s × 1000 → 914 ms). Conserva None para los días sin dato.
+def _escalar(valor, factor: float, decimales: int):
+    if valor is None:
+        return None
+    r = round(valor * factor, decimales)
+    return int(r) if decimales == 0 else r
+
+
+# Arma, por cada KPI de la sección kpi_graficos del config, la serie diaria
+# lista para dibujar en el popup.
+def _armar_kpi_series(series_diarias: dict, cfg: dict) -> dict:
+
+    slo_cfg   = cfg["slo"]
+    resultado = {}
+
+    for clave, g in cfg.get("kpi_graficos", {}).items():
+        puntos = series_diarias.get(g["metrica"], [])
+        if not puntos:
+            print(f"[RENDER] kpi_graficos {clave}: sin datos para {g['metrica']}, se omite")
+            continue
+
+        factor    = g.get("factor", 1)
+        decimales = g.get("decimales", 3)
+        umbral    = slo_cfg[g["slo"]]["amarillo"]
+
+        resultado[clave] = {
+            "titulo":    g["titulo"],
+            "unidad":    g["unidad"],
+            "decimales": decimales,
+            "labels":    [
+                datetime.strptime(f, "%Y-%m-%d").strftime("%d/%m")
+                for f, _ in puntos
+            ],
+            "data":      [_escalar(v, factor, decimales) for _, v in puntos],
+            "slo":       round(umbral * factor, 6),
+        }
+
+        print(f"[RENDER] kpi_graficos {clave}: {len(puntos)} puntos · "
+              f"SLO {resultado[clave]['slo']} {g['unidad']}")
+
+    return resultado
 
 # Preparación del contexto para renderizar el dashboard
 def _preparar_contexto_periodo(
@@ -28,6 +70,7 @@ def _preparar_contexto_periodo(
     fecha_label:  str,
     hay_tp:       bool,
     dias_afectados:   list,
+    series_diarias:   dict,
     cfg:          dict,
 ) -> dict:
 
@@ -330,6 +373,9 @@ def _preparar_contexto_periodo(
     # Eje Y dinámico
     y_min = round(min(chart_data) - 0.3, 1)
 
+    # Series diarias de cada KPI para los popups
+    kpi_series = _armar_kpi_series(series_diarias, cfg)
+
     return {
         # Imágenes
         "logo_emp_b64": _b64(cfg["assets"]["logo_emp"]),
@@ -383,6 +429,9 @@ def _preparar_contexto_periodo(
         # Días afectados
         "dias_afectados": dias_afectados_ctx,
         "peak_chart_indices": peak_chart_indices,
+
+        # Popups de KPIs
+        "kpi_series": kpi_series,
     }
 
 
@@ -398,13 +447,14 @@ def render_dashboard_periodo(
     fecha_label:  str,
     hay_tp:       bool,
     dias_afectados:   list,
+    series_diarias:   dict,
     output_path:  str,
 ) -> str:
     cfg = _load_config()
     ctx = _preparar_contexto_periodo(
         kpis, disp_por_dia, dias_con_tp,
         gap, desglose_causas, tps_list, ventanas_extra_list, fecha_label, 
-        hay_tp, dias_afectados, cfg,
+        hay_tp, dias_afectados, series_diarias, cfg,
     )
 
     template_dir = os.path.join(os.path.dirname(__file__), "template")

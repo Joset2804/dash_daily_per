@@ -8,7 +8,7 @@ from process.periodo import (
     calcular_launcher_periodo,
     get_tps_display_periodo,
 )
-from sources.npaw    import fetch_kpis, fetch_errores_por_codigo, fetch_errores_por_codigo_dia
+from sources.npaw    import fetch_kpis, fetch_errores_por_codigo, fetch_errores_por_codigo_dia, fetch_timeseries_dia
 from process.peaks  import detectar_peaks_periodo
 from process.ventanas import get_ventanas_extra_display
 
@@ -21,13 +21,16 @@ def run(fecha_desde: str, fecha_hasta: str):
     print(f"  Dashboard OTT Período — {fecha_desde} → {fecha_hasta}")
     print(f"{'='*50}\n")
 
+    # 0. Series diarias de todos los KPIs — UNA sola llamada, compartida
+    ts_dia = fetch_timeseries_dia(fecha_desde, fecha_hasta)
+
     # 1. Disponibilidad día a día + corrección TPs
     disp_final, disp_por_dia, dias_con_tp, hay_tp, ts_hora_raw = calcular_disponibilidad_periodo(
-        fecha_desde, fecha_hasta
+        fecha_desde, fecha_hasta, ts_dia
     )
 
     # 2. Launcher promedio del período
-    launcher_final, _ = calcular_launcher_periodo(fecha_desde, fecha_hasta)
+    launcher_final, _ = calcular_launcher_periodo(fecha_desde, fecha_hasta, ts_dia)
 
     # 3. KPIs totales del período (una sola llamada granularity=total)
     kpis = fetch_kpis(fecha_desde, fecha_hasta)
@@ -118,6 +121,7 @@ def run(fecha_desde: str, fecha_hasta: str):
         fecha_label  = fecha_label,
         hay_tp       = hay_tp,
         dias_afectados = dias_afectados,
+        series_diarias = ts_dia,
         output_path  = output_path,
     )
 
